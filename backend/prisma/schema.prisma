@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userVendorChannels UserVendorChannel[]
+  messages          Message[]
+  analyticsCache    AnalyticsCache[]
+
+  @@map("users")
+}
+
+model Vendor {
+  id   String @id @default(cuid())
+  name String @unique // msg91, karix, aisensy, sendgrid
+  slug String @unique // url-friendly version
+
+  // Relations
+  userVendorChannels UserVendorChannel[]
+  messages          Message[]
+  analyticsCache    AnalyticsCache[]
+
+  @@map("vendors")
+}
+
+model Channel {
+  id   String @id @default(cuid())
+  type String @unique // sms, whatsapp, email
+  name String
+
+  // Relations
+  userVendorChannels UserVendorChannel[]
+  messages          Message[]
+  analyticsCache    AnalyticsCache[]
+
+  @@map("channels")
+}
+
+model UserVendorChannel {
+  id         String @id @default(cuid())
+  userId     String @map("user_id")
+  vendorId   String @map("vendor_id")
+  channelId  String @map("channel_id")
+  webhookUrl String @unique @map("webhook_url")
+  isActive   Boolean @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor  Vendor  @relation(fields: [vendorId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([userId, vendorId, channelId])
+  @@map("user_vendor_channels")
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  vendorId       String    @map("vendor_id")
+  channelId      String    @map("channel_id")
+  recipient      String
+  messageId      String?   @map("message_id") // vendor-provided message ID
+  contentSummary String?   @map("content_summary")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor  Vendor  @relation(fields: [vendorId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+  events  MessageEvent[]
+
+  @@map("messages")
+}
+
+model MessageEvent {
+  id         String   @id @default(cuid())
+  messageId  String   @map("message_id")
+  status     String   // sent, delivered, read, failed, bounced
+  reason     String?  // failure reason if applicable
+  timestamp  DateTime @default(now())
+  rawPayload String?  @map("raw_payload") // JSON string of webhook payload
+
+  // Relations
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_events")
+}
+
+model AnalyticsCache {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  vendorId       String?  @map("vendor_id")
+  channelId      String?  @map("channel_id")
+  date           DateTime
+  totalSent      Int      @default(0) @map("total_sent")
+  totalDelivered Int      @default(0) @map("total_delivered")
+  totalRead      Int      @default(0) @map("total_read")
+  totalFailed    Int      @default(0) @map("total_failed")
+  successRate    Float    @default(0) @map("success_rate")
+  lastUpdated    DateTime @updatedAt @map("last_updated")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor  Vendor?  @relation(fields: [vendorId], references: [id])
+  channel Channel? @relation(fields: [channelId], references: [id])
+
+  @@unique([userId, vendorId, channelId, date])
+  @@map("analytics_cache")
+}
