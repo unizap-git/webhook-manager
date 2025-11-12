@@ -2,13 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 
+import { env, isDevelopment } from './config/env';
 import { config } from './config/database';
 import { logger } from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import { globalRateLimit } from './middleware/rateLimiter';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -18,23 +18,15 @@ import webhookRoutes from './routes/webhook';
 import analyticsRoutes from './routes/analytics';
 import userRoutes from './routes/user';
 
-// Workers
+// Services
 import { initializeWorkers } from './workers';
-
-// Load environment variables
-dotenv.config();
+import cronService from './services/cronService';
+import { getRedisClient } from './config/redis';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+app.use(globalRateLimit);
 
 // Middleware
 app.use(helmet({
@@ -42,21 +34,34 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: env.CORS_ORIGIN,
   credentials: true,
 }));
-app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const redisClient = await getRedisClient();
+    const redisStatus = redisClient ? 'connected' : 'disconnected';
+    
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: env.NODE_ENV,
+      redis: redisStatus,
+      cronService: cronService.isRunning()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: 'Health check failed'
+    });
+  }
 });
 
 // API routes
@@ -67,43 +72,73 @@ app.use('/api/webhook', webhookRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    path: req.originalUrl,
-  });
-});
+// 404 handler for undefined routes
+app.use(notFoundHandler);
 
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize workers and start server
+// Initialize services and start server
 async function startServer() {
   try {
+    logger.info('🚀 Starting Communication Analytics Backend...');
+
+    // Initialize Redis connection
+    try {
+      await getRedisClient();
+      logger.info('✅ Redis connection established');
+    } catch (error) {
+      if (isDevelopment()) {
+        logger.warn('⚠️  Redis unavailable - continuing without queue processing');
+      } else {
+        throw error;
+      }
+    }
+
     // Initialize background workers
     await initializeWorkers();
+    logger.info('✅ Background workers initialized');
     
-    app.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
-      logger.info(`Environment: ${process.env.NODE_ENV}`);
-      logger.info(`Frontend URL: ${process.env.FRONTEND_URL}`);
+    // Start cron service
+    await cronService.start();
+    logger.info('✅ Cron service started');
+    
+    // Start HTTP server
+    const server = app.listen(env.PORT, () => {
+      logger.info(`✅ Server running on port ${env.PORT}`);
+      logger.info(`🌍 Environment: ${env.NODE_ENV}`);
+      logger.info(`🔗 Frontend URL: ${env.CORS_ORIGIN}`);
+      logger.info('🎉 Communication Analytics Backend is ready!');
     });
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async () => {
+      logger.info('📴 Shutting down gracefully...');
+      
+      // Close HTTP server
+      server.close(() => {
+        logger.info('✅ HTTP server closed');
+      });
+
+      // Stop cron service
+      try {
+        await cronService.stop();
+        logger.info('✅ Cron service stopped');
+      } catch (error) {
+        logger.error('❌ Error stopping cron service:', error);
+      }
+
+      process.exit(0);
+    };
+
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
+    
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully...');
-  process.exit(0);
-});
-
+// Start the server
 startServer();
