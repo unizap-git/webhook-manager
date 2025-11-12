@@ -99,9 +99,10 @@ async function startServer() {
     await initializeWorkers();
     logger.info('✅ Background workers initialized');
     
-    // Start cron service
-    await cronService.start();
-    logger.info('✅ Cron service started');
+    // Start cron service - DISABLED for webhook testing
+    // await cronService.start();
+    // logger.info('✅ Cron service started');
+    logger.info('⚠️ Cron service disabled for webhook testing');
     
     // Start HTTP server
     const server = app.listen(env.PORT, () => {

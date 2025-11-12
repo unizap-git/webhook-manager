@@ -80,9 +80,9 @@ export async function processWebhookPayload(
           userId,
           vendorId: vendor.id,
           channelId: channel.id,
-          recipient: parsedData.recipient,
-          messageId: parsedData.messageId,
-          contentSummary: parsedData.contentSummary,
+          recipient: parsedData.recipient || 'unknown',
+          messageId: parsedData.messageId || `${Date.now()}`,
+          contentSummary: parsedData.contentSummary || 'No content summary',
         },
       });
     }
