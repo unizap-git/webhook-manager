@@ -155,7 +155,131 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
   }
 };
 
-export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getEventAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    const { period = '7d', vendorId, channelId } = req.query;
+
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (period) {
+      case '1d':
+        startDate.setDate(endDate.getDate() - 1);
+        break;
+      case '7d':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      default:
+        startDate.setDate(endDate.getDate() - 7);
+    }
+
+    // Build where clause for message events
+    const whereClause: any = {
+      message: {
+        userId,
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    };
+
+    if (vendorId) {
+      whereClause.message.vendorId = vendorId as string;
+    }
+
+    if (channelId) {
+      whereClause.message.channelId = channelId as string;
+    }
+
+    // Get event name breakdown from raw payload
+    const messageEvents = await prisma.messageEvent.findMany({
+      where: whereClause,
+      include: {
+        message: {
+          include: {
+            vendor: true,
+            channel: true,
+          },
+        },
+      },
+    });
+
+    // Parse eventName from rawPayload and group by vendor/channel
+    const eventBreakdown: { [key: string]: { [eventName: string]: number } } = {};
+    const vendorChannelBreakdown: { [key: string]: { [eventName: string]: number } } = {};
+    
+    messageEvents.forEach(event => {
+      try {
+        const payload = event.rawPayload ? JSON.parse(event.rawPayload) : {};
+        const eventName = payload.eventName || event.status || 'unknown';
+        const vendor = event.message.vendor.name;
+        const channel = event.message.channel.type;
+        const vendorChannelKey = `${vendor}_${channel}`;
+
+        // Overall event breakdown
+        if (!eventBreakdown[eventName]) {
+          eventBreakdown[eventName] = { count: 0 };
+        }
+        eventBreakdown[eventName].count = (eventBreakdown[eventName].count || 0) + 1;
+
+        // Vendor-Channel specific breakdown
+        if (!vendorChannelBreakdown[vendorChannelKey]) {
+          vendorChannelBreakdown[vendorChannelKey] = {};
+        }
+        if (!vendorChannelBreakdown[vendorChannelKey][eventName]) {
+          vendorChannelBreakdown[vendorChannelKey][eventName] = 0;
+        }
+        vendorChannelBreakdown[vendorChannelKey][eventName]++;
+      } catch (error) {
+        logger.error('Error parsing raw payload:', error);
+      }
+    });
+
+    // Convert to arrays and sort by count
+    const eventStats = Object.entries(eventBreakdown)
+      .map(([eventName, data]) => ({
+        eventName,
+        count: data.count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const vendorChannelStats = Object.entries(vendorChannelBreakdown)
+      .map(([vendorChannel, events]) => {
+        const [vendor, channel] = vendorChannel.split('_');
+        const totalEvents = Object.values(events).reduce((sum, count) => sum + count, 0);
+        
+        return {
+          vendor,
+          channel,
+          totalEvents,
+          eventBreakdown: Object.entries(events)
+            .map(([eventName, count]) => ({
+              eventName,
+              count,
+              percentage: Math.round((count / totalEvents) * 100 * 100) / 100,
+            }))
+            .sort((a, b) => b.count - a.count),
+        };
+      })
+      .sort((a, b) => b.totalEvents - a.totalEvents);
+
+    res.json({
+      eventStats,
+      vendorChannelStats,
+      period,
+      totalEvents: messageEvents.length,
+    });
+  } catch (error) {
+    logger.error('Event analytics error:', error);
+    next(error);
+  }
+};
   try {
     const userId = req.user?.userId;
     const { 
@@ -381,144 +505,3 @@ export const getEventAnalytics = async (req: AuthRequest, res: Response, next: N
     next(error);
   }
 };
-
-export const getDebugEventData = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user?.userId;
-    const { limit = 50 } = req.query;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    // Get recent message events with raw payload data
-    const messageEvents = await prisma.messageEvent.findMany({
-      where: {
-        message: {
-          userId: userId,
-        },
-        rawPayload: {
-          not: null,
-        },
-      },
-      include: {
-        message: {
-          include: {
-            vendor: true,
-            channel: true,
-          },
-        },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-      take: parseInt(limit as string),
-    });
-
-    // Parse and analyze the data
-    const debugData = messageEvents.map(event => {
-      let parsedPayload = {};
-      let parseError = null;
-      
-      try {
-        parsedPayload = event.rawPayload ? JSON.parse(event.rawPayload) : {};
-      } catch (error) {
-        parseError = (error as Error).message;
-      }
-
-      return {
-        eventId: event.id,
-        messageId: event.messageId,
-        timestamp: event.timestamp,
-        
-        // Current database status
-        dbStatus: event.status,
-        dbReason: event.reason,
-        
-        // Raw payload analysis
-        rawEventName: (parsedPayload as any).eventName,
-        rawStatus: (parsedPayload as any).status,
-        rawDeliveryStatus: (parsedPayload as any).deliveryStatus,
-        
-        // Message details
-        vendor: event.message.vendor.name,
-        channel: event.message.channel.type,
-        recipient: event.message.recipient,
-        
-        // Raw payload (for debugging)
-        fullRawPayload: parsedPayload,
-        parseError,
-        
-        // Analysis
-        mapping: {
-          eventName: (parsedPayload as any).eventName,
-          shouldBeStatus: mapEventNameToStatus((parsedPayload as any).eventName),
-          actualStatus: event.status,
-          isCorrect: mapEventNameToStatus((parsedPayload as any).eventName) === event.status,
-        }
-      };
-    });
-
-    // Summary statistics
-    const summary = {
-      totalEvents: debugData.length,
-      mappingIssues: debugData.filter(d => !d.mapping.isCorrect).length,
-      eventNameDistribution: {},
-      statusDistribution: {},
-      vendorChannelBreakdown: {},
-    };
-
-    // Event name distribution
-    debugData.forEach(d => {
-      const eventName = d.rawEventName || 'unknown';
-      (summary.eventNameDistribution as any)[eventName] = 
-        ((summary.eventNameDistribution as any)[eventName] || 0) + 1;
-      
-      const status = d.dbStatus;
-      (summary.statusDistribution as any)[status] = 
-        ((summary.statusDistribution as any)[status] || 0) + 1;
-        
-      const vendorChannel = `${d.vendor}_${d.channel}`;
-      if (!(summary.vendorChannelBreakdown as any)[vendorChannel]) {
-        (summary.vendorChannelBreakdown as any)[vendorChannel] = {
-          eventNames: {},
-          statuses: {},
-        };
-      }
-      
-      const vcBreakdown = (summary.vendorChannelBreakdown as any)[vendorChannel];
-      vcBreakdown.eventNames[eventName] = (vcBreakdown.eventNames[eventName] || 0) + 1;
-      vcBreakdown.statuses[status] = (vcBreakdown.statuses[status] || 0) + 1;
-    });
-
-    res.json({
-      summary,
-      debugData,
-      mappingIssues: debugData.filter(d => !d.mapping.isCorrect),
-    });
-  } catch (error) {
-    logger.error('Debug event data error:', error);
-    next(error);
-  }
-};
-
-// Helper function to map event names to status
-function mapEventNameToStatus(eventName: string): string {
-  if (!eventName) return 'sent';
-  
-  const eventMap: { [key: string]: string } = {
-    'delivered': 'delivered',
-    'sent': 'sent',
-    'failed': 'failed',
-    'rejected': 'failed',
-    'undelivered': 'failed',
-    'expired': 'failed',
-    'unknown': 'failed',
-    'read': 'read',
-    'pending': 'sent',
-    'queued': 'sent',
-    'error': 'failed',
-  };
-  
-  return eventMap[eventName.toLowerCase()] || 'sent';
-}

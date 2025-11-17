@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAnalytics, getDashboardStats } from '../controllers/analyticsController';
+import { getAnalytics, getDashboardStats, getEventAnalytics, getDebugEventData } from '../controllers/analyticsController';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -9,6 +9,8 @@ router.use(authenticateToken);
 
 // Routes
 router.get('/dashboard', getDashboardStats);
+router.get('/events', getEventAnalytics);
+router.get('/debug', getDebugEventData);
 router.get('/', getAnalytics);
 
 export default router;

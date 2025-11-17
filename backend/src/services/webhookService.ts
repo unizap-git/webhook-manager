@@ -110,19 +110,60 @@ export async function processWebhookPayload(
 }
 
 function parseMsg91Webhook(data: WebhookPayload, channelType: string) {
-  // MSG91 webhook format parsing
-  // This is a simplified implementation - you'll need to adjust based on actual webhook formats
-  const messageId = data.requestId || data.messageId || data.id;
-  const status = mapMsg91Status(data.status || data.deliveryStatus);
-  const recipient = data.number || data.to || data.recipient;
+  // MSG91 webhook format parsing - Updated for new payload structure
+  console.log('Parsing Msg91 webhook:', JSON.stringify(data, null, 2));
+  console.log('Channel type:', channelType);
+
+  // Extract message ID based on channel type
+  const messageId = data.requestId || data.messageId || data.id || data.UUID || 'unknown';
+  
+  // Extract recipient based on channel type
+  let recipient: string;
+  if (channelType === 'sms') {
+    recipient = data.telNum || data.number || data.to || 'unknown';
+  } else if (channelType === 'whatsapp') {
+    recipient = data.customerNumber || data.integratedNumber || data.to || 'unknown';
+  } else {
+    recipient = data.number || data.telNum || data.customerNumber || data.to || data.recipient || 'unknown';
+  }
+
+  // Map eventName to our internal status
+  const status = mapMsg91EventName(data.eventName, data.status);
+  
+  // Extract content summary based on channel type
+  let contentSummary: string | undefined;
+  if (channelType === 'whatsapp' && data.content) {
+    try {
+      const contentObj = JSON.parse(data.content);
+      contentSummary = contentObj.text?.substring(0, 100);
+    } catch {
+      contentSummary = data.content.substring(0, 100);
+    }
+  } else {
+    contentSummary = data.text?.substring(0, 100) || data.message?.substring(0, 100);
+  }
+
+  // Extract timestamp
+  const timestamp = data.ts || data.deliveryTime || data.requestedAt || data.timestamp;
   
   return {
     messageId,
     status,
     recipient,
-    reason: data.reason || data.error,
-    timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
-    contentSummary: data.text ? data.text.substring(0, 100) : undefined,
+    reason: data.failureReason || data.reason || data.error || '',
+    timestamp: timestamp ? new Date(timestamp) : new Date(),
+    contentSummary,
+    eventName: data.eventName, // Keep original eventName for analytics
+    vendorData: {
+      campaignName: data.campaignName,
+      senderId: data.senderId,
+      route: data.route,
+      credit: data.credit,
+      smsLength: data.smsLength,
+      templateName: data.templateName,
+      direction: data.direction,
+      companyId: data.companyId,
+    },
   };
 }
 
@@ -175,10 +216,48 @@ function parseSendGridWebhook(data: WebhookPayload, channelType: string) {
 }
 
 // Status mapping functions
+function mapMsg91EventName(eventName: string, fallbackStatus?: string): string {
+  // Map MSG91 eventName to our internal status
+  if (!eventName) {
+    // Fallback to old status mapping if eventName is not present
+    return mapMsg91Status(fallbackStatus || '1');
+  }
+  
+  const eventMap: { [key: string]: string } = {
+    // SMS Events (capitalized from Msg91)
+    'delivered': 'delivered',
+    'sent': 'sent', 
+    'failed': 'failed',
+    'rejected': 'failed',
+    'undelivered': 'failed',
+    'expired': 'failed',
+    'unknown': 'failed',
+    
+    // WhatsApp Events (lowercase from Msg91)
+    'read': 'read',
+    
+    // Common Events
+    'pending': 'sent',
+    'queued': 'sent',
+    'error': 'failed',
+  };
+  
+  const normalizedEventName = eventName.toLowerCase();
+  const mappedStatus = eventMap[normalizedEventName];
+  
+  if (mappedStatus) {
+    console.log(`🔄 Mapping eventName "${eventName}" → status "${mappedStatus}"`);
+    return mappedStatus;
+  }
+  
+  console.warn(`⚠️ Unknown eventName "${eventName}", defaulting to 'sent'`);
+  return 'sent';
+}
+
 function mapMsg91Status(status: string): string {
   const statusMap: { [key: string]: string } = {
     '1': 'sent',
-    '2': 'delivered',
+    '2': 'delivered', 
     '3': 'failed',
     '4': 'failed',
     'delivered': 'delivered',
