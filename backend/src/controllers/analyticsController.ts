@@ -502,6 +502,549 @@ export const getDebugEventData = async (req: AuthRequest, res: Response, next: N
   }
 };
 
+// Enhanced Vendor-Channel Analytics
+export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { period = '7d', startDate, endDate } = req.query;
+
+    // Calculate date range
+    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
+    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    
+    if (!startDate) {
+      switch (period) {
+        case '1d':
+          startDate_calc.setDate(endDate_calc.getDate() - 1);
+          break;
+        case '7d':
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+          break;
+        case '30d':
+          startDate_calc.setDate(endDate_calc.getDate() - 30);
+          break;
+        default:
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+      }
+    }
+
+    // Get all message events with their raw payloads
+    const messageEvents = await prisma.messageEvent.findMany({
+      where: {
+        message: {
+          userId: userId,
+          createdAt: {
+            gte: startDate_calc,
+            lte: endDate_calc,
+          },
+        },
+      },
+      include: {
+        message: {
+          include: {
+            vendor: true,
+            channel: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    // Process vendor-channel analytics
+    const vendorChannelStats: { [key: string]: any } = {};
+
+    messageEvents.forEach(event => {
+      const vendor = event.message.vendor.name;
+      const channel = event.message.channel.type;
+      const key = `${vendor}_${channel}`;
+
+      if (!vendorChannelStats[key]) {
+        vendorChannelStats[key] = {
+          vendor,
+          channel,
+          totalMessages: 0,
+          sent: 0,
+          delivered: 0,
+          read: 0,
+          failed: 0,
+          events: {},
+          failureReasons: {},
+          deliveryRate: 0,
+          readRate: 0,
+          failureRate: 0,
+        };
+      }
+
+      const stats = vendorChannelStats[key];
+      stats.totalMessages += 1;
+
+      // Parse raw payload for detailed analytics
+      let eventName = event.status;
+      let failureReason = event.reason;
+
+      try {
+        if (event.rawPayload) {
+          const payload = JSON.parse(event.rawPayload);
+          eventName = payload.eventName || event.status;
+          failureReason = payload.reason || payload.error || payload.failureReason || event.reason;
+        }
+      } catch (error) {
+        logger.error('Error parsing raw payload:', error);
+      }
+
+      // Count by event status
+      if (event.status === 'sent') stats.sent += 1;
+      else if (event.status === 'delivered') stats.delivered += 1;
+      else if (event.status === 'read') stats.read += 1;
+      else if (event.status === 'failed') stats.failed += 1;
+
+      // Count by event name from raw payload
+      stats.events[eventName] = (stats.events[eventName] || 0) + 1;
+
+      // Track failure reasons
+      if (event.status === 'failed' && failureReason) {
+        stats.failureReasons[failureReason] = (stats.failureReasons[failureReason] || 0) + 1;
+      }
+    });
+
+    // Calculate rates for each vendor-channel combination
+    Object.values(vendorChannelStats).forEach((stats: any) => {
+      if (stats.totalMessages > 0) {
+        stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
+        stats.readRate = Math.round((stats.read / stats.totalMessages) * 10000) / 100;
+        stats.failureRate = Math.round((stats.failed / stats.totalMessages) * 10000) / 100;
+        stats.successRate = Math.round(((stats.delivered + stats.read + stats.sent) / stats.totalMessages) * 10000) / 100;
+      }
+
+      // Sort failure reasons by count
+      stats.failureReasons = Object.entries(stats.failureReasons)
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a: any, b: any) => b.count - a.count);
+
+      // Sort events by count
+      stats.events = Object.entries(stats.events)
+        .map(([eventName, count]) => ({ eventName, count }))
+        .sort((a: any, b: any) => b.count - a.count);
+    });
+
+    // Convert to array and sort by total messages
+    const vendorChannelArray = Object.values(vendorChannelStats)
+      .sort((a: any, b: any) => b.totalMessages - a.totalMessages);
+
+    res.json({
+      vendorChannelStats: vendorChannelArray,
+      period,
+      dateRange: {
+        startDate: startDate_calc,
+        endDate: endDate_calc,
+      },
+      summary: {
+        totalVendorChannelCombinations: vendorChannelArray.length,
+        totalMessages: vendorChannelArray.reduce((sum: number, vc: any) => sum + vc.totalMessages, 0),
+      },
+    });
+  } catch (error) {
+    logger.error('Vendor-channel analytics error:', error);
+    next(error);
+  }
+};
+
+// Channel-wise Analytics
+export const getChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { period = '7d', startDate, endDate } = req.query;
+
+    // Calculate date range
+    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
+    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    
+    if (!startDate) {
+      switch (period) {
+        case '1d':
+          startDate_calc.setDate(endDate_calc.getDate() - 1);
+          break;
+        case '7d':
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+          break;
+        case '30d':
+          startDate_calc.setDate(endDate_calc.getDate() - 30);
+          break;
+        default:
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+      }
+    }
+
+    // Get all message events grouped by channel
+    const messageEvents = await prisma.messageEvent.findMany({
+      where: {
+        message: {
+          userId: userId,
+          createdAt: {
+            gte: startDate_calc,
+            lte: endDate_calc,
+          },
+        },
+      },
+      include: {
+        message: {
+          include: {
+            vendor: true,
+            channel: true,
+          },
+        },
+      },
+    });
+
+    // Process channel analytics
+    const channelStats: { [key: string]: any } = {};
+
+    messageEvents.forEach(event => {
+      const channel = event.message.channel.type;
+
+      if (!channelStats[channel]) {
+        channelStats[channel] = {
+          channel,
+          totalMessages: 0,
+          sent: 0,
+          delivered: 0,
+          read: 0,
+          failed: 0,
+          vendors: {},
+          events: {},
+          failureReasons: {},
+          deliveryRate: 0,
+          readRate: 0,
+          failureRate: 0,
+          dailyStats: {},
+        };
+      }
+
+      const stats = channelStats[channel];
+      stats.totalMessages += 1;
+
+      // Count by status
+      if (event.status === 'sent') stats.sent += 1;
+      else if (event.status === 'delivered') stats.delivered += 1;
+      else if (event.status === 'read') stats.read += 1;
+      else if (event.status === 'failed') stats.failed += 1;
+
+      // Track vendors for this channel
+      const vendor = event.message.vendor.name;
+      if (!stats.vendors[vendor]) {
+        stats.vendors[vendor] = { sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
+      }
+      
+      if (event.status === 'sent') stats.vendors[vendor].sent += 1;
+      else if (event.status === 'delivered') stats.vendors[vendor].delivered += 1;
+      else if (event.status === 'read') stats.vendors[vendor].read += 1;
+      else if (event.status === 'failed') stats.vendors[vendor].failed += 1;
+      stats.vendors[vendor].total += 1;
+
+      // Parse raw payload for detailed analytics
+      let eventName = event.status;
+      let failureReason = event.reason;
+
+      try {
+        if (event.rawPayload) {
+          const payload = JSON.parse(event.rawPayload);
+          eventName = payload.eventName || event.status;
+          failureReason = payload.reason || payload.error || payload.failureReason || event.reason;
+        }
+      } catch (error) {
+        logger.error('Error parsing raw payload:', error);
+      }
+
+      // Count by event name
+      stats.events[eventName] = (stats.events[eventName] || 0) + 1;
+
+      // Track failure reasons
+      if (event.status === 'failed' && failureReason) {
+        stats.failureReasons[failureReason] = (stats.failureReasons[failureReason] || 0) + 1;
+      }
+
+      // Daily breakdown
+      const dateKey = event.timestamp.toISOString().split('T')[0];
+      if (!stats.dailyStats[dateKey]) {
+        stats.dailyStats[dateKey] = { sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
+      }
+      
+      if (event.status === 'sent') stats.dailyStats[dateKey].sent += 1;
+      else if (event.status === 'delivered') stats.dailyStats[dateKey].delivered += 1;
+      else if (event.status === 'read') stats.dailyStats[dateKey].read += 1;
+      else if (event.status === 'failed') stats.dailyStats[dateKey].failed += 1;
+      stats.dailyStats[dateKey].total += 1;
+    });
+
+    // Calculate rates and format data
+    Object.values(channelStats).forEach((stats: any) => {
+      if (stats.totalMessages > 0) {
+        stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
+        stats.readRate = Math.round((stats.read / stats.totalMessages) * 10000) / 100;
+        stats.failureRate = Math.round((stats.failed / stats.totalMessages) * 10000) / 100;
+        stats.successRate = Math.round(((stats.delivered + stats.read + stats.sent) / stats.totalMessages) * 10000) / 100;
+      }
+
+      // Format vendor stats
+      stats.vendors = Object.entries(stats.vendors)
+        .map(([vendor, counts]: [string, any]) => ({
+          vendor,
+          ...counts,
+          successRate: counts.total > 0 ? Math.round(((counts.delivered + counts.read) / counts.total) * 10000) / 100 : 0,
+        }))
+        .sort((a: any, b: any) => b.total - a.total);
+
+      // Sort failure reasons
+      stats.failureReasons = Object.entries(stats.failureReasons)
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a: any, b: any) => b.count - a.count);
+
+      // Sort events
+      stats.events = Object.entries(stats.events)
+        .map(([eventName, count]) => ({ eventName, count }))
+        .sort((a: any, b: any) => b.count - a.count);
+
+      // Format daily stats
+      stats.dailyStats = Object.entries(stats.dailyStats)
+        .map(([date, counts]: [string, any]) => ({
+          date,
+          ...counts,
+          successRate: counts.total > 0 ? Math.round(((counts.delivered + counts.read) / counts.total) * 10000) / 100 : 0,
+        }))
+        .sort((a: any, b: any) => a.date.localeCompare(b.date));
+    });
+
+    const channelArray = Object.values(channelStats)
+      .sort((a: any, b: any) => b.totalMessages - a.totalMessages);
+
+    res.json({
+      channelStats: channelArray,
+      period,
+      dateRange: {
+        startDate: startDate_calc,
+        endDate: endDate_calc,
+      },
+      summary: {
+        totalChannels: channelArray.length,
+        totalMessages: channelArray.reduce((sum: number, ch: any) => sum + ch.totalMessages, 0),
+      },
+    });
+  } catch (error) {
+    logger.error('Channel analytics error:', error);
+    next(error);
+  }
+};
+
+// Failure Reason Analytics
+export const getFailureAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { period = '7d', startDate, endDate, vendorId, channelId } = req.query;
+
+    // Calculate date range
+    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
+    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    
+    if (!startDate) {
+      switch (period) {
+        case '1d':
+          startDate_calc.setDate(endDate_calc.getDate() - 1);
+          break;
+        case '7d':
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+          break;
+        case '30d':
+          startDate_calc.setDate(endDate_calc.getDate() - 30);
+          break;
+        default:
+          startDate_calc.setDate(endDate_calc.getDate() - 7);
+      }
+    }
+
+    // Build where clause
+    const whereClause: any = {
+      message: {
+        userId: userId,
+        createdAt: {
+          gte: startDate_calc,
+          lte: endDate_calc,
+        },
+      },
+      status: 'failed',
+    };
+
+    if (vendorId) {
+      whereClause.message.vendorId = vendorId as string;
+    }
+
+    if (channelId) {
+      whereClause.message.channelId = channelId as string;
+    }
+
+    // Get all failed message events
+    const failedEvents = await prisma.messageEvent.findMany({
+      where: whereClause,
+      include: {
+        message: {
+          include: {
+            vendor: true,
+            channel: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    // Process failure analytics
+    const failureStats: { [key: string]: any } = {};
+    const vendorChannelFailures: { [key: string]: { [reason: string]: number } } = {};
+    const dailyFailures: { [key: string]: { [reason: string]: number } } = {};
+
+    failedEvents.forEach(event => {
+      let failureReason = event.reason || 'Unknown';
+
+      // Extract failure reason from raw payload
+      try {
+        if (event.rawPayload) {
+          const payload = JSON.parse(event.rawPayload);
+          failureReason = payload.reason || payload.error || payload.failureReason || 
+                         payload.errorMessage || payload.description || event.reason || 'Unknown';
+          
+          // Handle common error patterns
+          if (payload.status && payload.status.toLowerCase().includes('fail')) {
+            failureReason = payload.status;
+          }
+          if (payload.deliveryStatus && payload.deliveryStatus.toLowerCase().includes('fail')) {
+            failureReason = payload.deliveryStatus;
+          }
+        }
+      } catch (error) {
+        logger.error('Error parsing failure payload:', error);
+      }
+
+      const vendor = event.message.vendor.name;
+      const channel = event.message.channel.type;
+      const vendorChannelKey = `${vendor}_${channel}`;
+      const dateKey = event.timestamp.toISOString().split('T')[0];
+
+      // Overall failure reason stats
+      if (!failureStats[failureReason]) {
+        failureStats[failureReason] = {
+          reason: failureReason,
+          count: 0,
+          vendors: {},
+          channels: {},
+          examples: [],
+        };
+      }
+
+      failureStats[failureReason].count += 1;
+      failureStats[failureReason].vendors[vendor] = (failureStats[failureReason].vendors[vendor] || 0) + 1;
+      failureStats[failureReason].channels[channel] = (failureStats[failureReason].channels[channel] || 0) + 1;
+
+      // Store example for debugging (limit to 3 examples per reason)
+      if (failureStats[failureReason].examples.length < 3) {
+        failureStats[failureReason].examples.push({
+          messageId: event.messageId,
+          recipient: event.message.recipient,
+          timestamp: event.timestamp,
+          rawPayload: event.rawPayload ? JSON.parse(event.rawPayload) : null,
+        });
+      }
+
+      // Vendor-channel failures
+      if (!vendorChannelFailures[vendorChannelKey]) {
+        vendorChannelFailures[vendorChannelKey] = {};
+      }
+      vendorChannelFailures[vendorChannelKey][failureReason] = 
+        (vendorChannelFailures[vendorChannelKey][failureReason] || 0) + 1;
+
+      // Daily failures
+      if (!dailyFailures[dateKey]) {
+        dailyFailures[dateKey] = {};
+      }
+      dailyFailures[dateKey][failureReason] = (dailyFailures[dateKey][failureReason] || 0) + 1;
+    });
+
+    // Format failure stats
+    const failureArray = Object.values(failureStats)
+      .map((stats: any) => ({
+        ...stats,
+        percentage: Math.round((stats.count / failedEvents.length) * 10000) / 100,
+        vendors: Object.entries(stats.vendors).map(([vendor, count]) => ({ vendor, count })),
+        channels: Object.entries(stats.channels).map(([channel, count]) => ({ channel, count })),
+      }))
+      .sort((a: any, b: any) => b.count - a.count);
+
+    // Format vendor-channel failures
+    const vendorChannelArray = Object.entries(vendorChannelFailures)
+      .map(([vendorChannel, reasons]) => {
+        const [vendor, channel] = vendorChannel.split('_');
+        const totalFailures = Object.values(reasons).reduce((sum: number, count: any) => sum + count, 0);
+        
+        return {
+          vendor,
+          channel,
+          totalFailures,
+          reasons: Object.entries(reasons)
+            .map(([reason, count]) => ({
+              reason,
+              count,
+              percentage: Math.round((count as number / totalFailures) * 10000) / 100,
+            }))
+            .sort((a, b) => b.count - a.count),
+        };
+      })
+      .sort((a, b) => b.totalFailures - a.totalFailures);
+
+    // Format daily failures
+    const dailyArray = Object.entries(dailyFailures)
+      .map(([date, reasons]) => ({
+        date,
+        totalFailures: Object.values(reasons).reduce((sum: number, count: any) => sum + count, 0),
+        reasons: Object.entries(reasons)
+          .map(([reason, count]) => ({ reason, count }))
+          .sort((a, b) => b.count - a.count),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      summary: {
+        totalFailedMessages: failedEvents.length,
+        uniqueFailureReasons: failureArray.length,
+        topFailureReason: failureArray[0]?.reason || null,
+        period,
+      },
+      failureReasons: failureArray,
+      vendorChannelFailures: vendorChannelArray,
+      dailyFailures: dailyArray,
+      dateRange: {
+        startDate: startDate_calc,
+        endDate: endDate_calc,
+      },
+    });
+  } catch (error) {
+    logger.error('Failure analytics error:', error);
+    next(error);
+  }
+};
+
 // Helper function to map event names to status
 function mapEventNameToStatus(eventName: string): string {
   if (!eventName) return 'sent';
