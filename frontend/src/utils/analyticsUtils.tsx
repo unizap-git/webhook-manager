@@ -45,7 +45,7 @@ export const PerformanceChip: React.FC<PerformanceChipProps> = ({
   showIcon = false, 
   size = 'small' 
 }) => (
-  <Box display="flex" alignItems="center">
+  <Box display="flex" alignItems="center" justifyContent="center">
     {showIcon && getPerformanceIcon(value)}
     <Chip
       label={formatPercentage(value)}

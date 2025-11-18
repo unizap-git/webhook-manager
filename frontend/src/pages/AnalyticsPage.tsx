@@ -301,7 +301,7 @@ const AnalyticsPage: React.FC = () => {
                       <TableCell align="right">Delivered</TableCell>
                       <TableCell align="right">Read</TableCell>
                       <TableCell align="right">Failed</TableCell>
-                      <TableCell align="right">Success Rate</TableCell>
+                      <TableCell align="center">Success Rate</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -317,7 +317,7 @@ const AnalyticsPage: React.FC = () => {
                         <TableCell align="right">{vendor.totalDelivered}</TableCell>
                         <TableCell align="right">{vendor.totalRead}</TableCell>
                         <TableCell align="right">{vendor.totalFailed}</TableCell>
-                        <TableCell align="right">
+                        <TableCell align="center" sx={{ textAlign: 'center' }}>
                           <PerformanceChip value={vendor.successRate} />
                         </TableCell>
                       </TableRow>
@@ -346,7 +346,7 @@ const AnalyticsPage: React.FC = () => {
                       <TableCell align="right">Delivered</TableCell>
                       <TableCell align="right">Read</TableCell>
                       <TableCell align="right">Failed</TableCell>
-                      <TableCell align="right">Success Rate</TableCell>
+                      <TableCell align="center">Success Rate</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -360,7 +360,7 @@ const AnalyticsPage: React.FC = () => {
                         <TableCell align="right">{day.totalDelivered}</TableCell>
                         <TableCell align="right">{day.totalRead}</TableCell>
                         <TableCell align="right">{day.totalFailed}</TableCell>
-                        <TableCell align="right">
+                        <TableCell align="center" sx={{ textAlign: 'center' }}>
                           <PerformanceChip value={day.successRate} />
                         </TableCell>
                       </TableRow>

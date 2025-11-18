@@ -247,8 +247,8 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                     <TableCell align="right">Delivered</TableCell>
                     <TableCell align="right">Read</TableCell>
                     <TableCell align="right">Failed</TableCell>
-                    <TableCell align="right">Success Rate</TableCell>
-                    <TableCell align="right">Delivery Rate</TableCell>
+                    <TableCell align="center">Success Rate</TableCell>
+                    <TableCell align="center">Delivery Rate</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -274,10 +274,10 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                       <TableCell align="right">{stat.delivered}</TableCell>
                       <TableCell align="right">{stat.read}</TableCell>
                       <TableCell align="right">{stat.failed}</TableCell>
-                      <TableCell align="right">
+                      <TableCell align="center" sx={{ textAlign: 'center' }}>
                         <PerformanceChip value={stat.successRate} showIcon />
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell align="center" sx={{ textAlign: 'center' }}>
                         <PerformanceChip value={stat.deliveryRate} />
                       </TableCell>
                     </TableRow>
@@ -489,19 +489,19 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Vendor</TableCell>
-                          <TableCell align="right">Messages</TableCell>
-                          <TableCell align="right">Success Rate</TableCell>
+                        <TableCell>Vendor</TableCell>
+                        <TableCell align="right">Messages</TableCell>
+                        <TableCell align="center">Success Rate</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {channel.vendors.map((vendor, vendorIndex) => (
                           <TableRow key={vendorIndex}>
-                            <TableCell>{vendor.vendor}</TableCell>
-                            <TableCell align="right">{vendor.total}</TableCell>
-                            <TableCell align="right">
-                              <PerformanceChip value={vendor.successRate} />
-                            </TableCell>
+                          <TableCell>{vendor.vendor}</TableCell>
+                          <TableCell align="right">{vendor.total}</TableCell>
+                          <TableCell align="center" sx={{ textAlign: 'center' }}>
+                            <PerformanceChip value={vendor.successRate} />
+                          </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -547,23 +547,23 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                       <Table size="small">
                         <TableHead>
                           <TableRow>
-                            <TableCell>Date</TableCell>
-                            <TableCell align="right">Messages</TableCell>
-                            <TableCell align="right">Delivered</TableCell>
-                            <TableCell align="right">Failed</TableCell>
-                            <TableCell align="right">Success Rate</TableCell>
+                          <TableCell>Date</TableCell>
+                          <TableCell align="right">Messages</TableCell>
+                          <TableCell align="right">Delivered</TableCell>
+                          <TableCell align="right">Failed</TableCell>
+                          <TableCell align="center">Success Rate</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {channel.dailyStats.slice(-7).map((day, dayIndex) => (
                             <TableRow key={dayIndex}>
-                              <TableCell>{formatDate(day.date)}</TableCell>
-                              <TableCell align="right">{day.total}</TableCell>
-                              <TableCell align="right">{day.delivered}</TableCell>
-                              <TableCell align="right">{day.failed}</TableCell>
-                              <TableCell align="right">
-                                <PerformanceChip value={day.successRate} />
-                              </TableCell>
+                            <TableCell>{formatDate(day.date)}</TableCell>
+                            <TableCell align="right">{day.total}</TableCell>
+                            <TableCell align="right">{day.delivered}</TableCell>
+                            <TableCell align="right">{day.failed}</TableCell>
+                            <TableCell align="center" sx={{ textAlign: 'center' }}>
+                              <PerformanceChip value={day.successRate} />
+                            </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
