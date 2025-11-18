@@ -1,20 +1,14 @@
-import { Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { prisma, config } from '../config/database';
-import { logger } from '../utils/logger';
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('@prisma/client');
 
-interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    accountType: string;
-    parentId?: string;
-  };
-}
+const prisma = new PrismaClient();
+
+// JWT secret - in production, this should be an environment variable
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Helper function to generate a random password
-const generateRandomPassword = (): string => {
+const generateRandomPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   let password = '';
   for (let i = 0; i < 12; i++) {
@@ -23,58 +17,8 @@ const generateRandomPassword = (): string => {
   return password;
 };
 
-export const getUserProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user?.userId;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        accountType: true,
-        createdAt: true,
-        updatedAt: true,
-        parent: {
-          select: { id: true, email: true, name: true }
-        }
-      },
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'User not found',
-      });
-    }
-
-    // Get user statistics
-    const stats = await prisma.message.aggregate({
-      where: { userId },
-      _count: {
-        id: true,
-      },
-    });
-
-    const vendorChannelCount = await prisma.userVendorChannel.count({
-      where: { userId },
-    });
-
-    res.json({
-      user,
-      stats: {
-        totalMessages: stats._count.id,
-        activeConfigurations: vendorChannelCount,
-      },
-    });
-  } catch (error) {
-    logger.error('Get user profile error:', error);
-    next(error);
-  }
-};
-
 // Register new parent account
-export const register = async (req: Request, res: Response, next: NextFunction) => {
+const register = async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
@@ -103,7 +47,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id, email: user.email, accountType: user.accountType },
-      config.jwt.secret,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -119,13 +63,13 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       }
     });
   } catch (error) {
-    logger.error('Register error:', error);
-    next(error);
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 // Login
-export const login = async (req: Request, res: Response, next: NextFunction) => {
+const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -157,7 +101,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         accountType: user.accountType,
         parentId: user.parentId 
       },
-      config.jwt.secret,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -174,19 +118,19 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       }
     });
   } catch (error) {
-    logger.error('Login error:', error);
-    next(error);
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 // Create child account (only for parent accounts)
-export const createChildAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const createChildAccount = async (req, res) => {
   try {
     const { email, name } = req.body;
-    const parentId = req.user?.userId;
+    const parentId = req.user.userId;
 
     // Verify that the requester is a parent account
-    if (req.user?.accountType !== 'PARENT') {
+    if (req.user.accountType !== 'PARENT') {
       return res.status(403).json({ error: 'Only parent accounts can create child accounts' });
     }
 
@@ -227,18 +171,18 @@ export const createChildAccount = async (req: AuthRequest, res: Response, next: 
       }
     });
   } catch (error) {
-    logger.error('Create child account error:', error);
-    next(error);
+    console.error('Create child account error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 // Get child accounts (only for parent accounts)
-export const getChildAccounts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const getChildAccounts = async (req, res) => {
   try {
-    const parentId = req.user?.userId;
+    const parentId = req.user.userId;
 
     // Verify that the requester is a parent account
-    if (req.user?.accountType !== 'PARENT') {
+    if (req.user.accountType !== 'PARENT') {
       return res.status(403).json({ error: 'Only parent accounts can view child accounts' });
     }
 
@@ -260,19 +204,19 @@ export const getChildAccounts = async (req: AuthRequest, res: Response, next: Ne
       childAccounts
     });
   } catch (error) {
-    logger.error('Get child accounts error:', error);
-    next(error);
+    console.error('Get child accounts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 // Reset child account password (only for parent accounts)
-export const resetChildPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const resetChildPassword = async (req, res) => {
   try {
     const { childId } = req.params;
-    const parentId = req.user?.userId;
+    const parentId = req.user.userId;
 
     // Verify that the requester is a parent account
-    if (req.user?.accountType !== 'PARENT') {
+    if (req.user.accountType !== 'PARENT') {
       return res.status(403).json({ error: 'Only parent accounts can reset child passwords' });
     }
 
@@ -305,19 +249,19 @@ export const resetChildPassword = async (req: AuthRequest, res: Response, next: 
       newPassword // Send the new password back once
     });
   } catch (error) {
-    logger.error('Reset child password error:', error);
-    next(error);
+    console.error('Reset child password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 // Delete child account (only for parent accounts)
-export const deleteChildAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const deleteChildAccount = async (req, res) => {
   try {
     const { childId } = req.params;
-    const parentId = req.user?.userId;
+    const parentId = req.user.userId;
 
     // Verify that the requester is a parent account
-    if (req.user?.accountType !== 'PARENT') {
+    if (req.user.accountType !== 'PARENT') {
       return res.status(403).json({ error: 'Only parent accounts can delete child accounts' });
     }
 
@@ -344,7 +288,16 @@ export const deleteChildAccount = async (req: AuthRequest, res: Response, next: 
       message: 'Child account deleted successfully'
     });
   } catch (error) {
-    logger.error('Delete child account error:', error);
-    next(error);
+    console.error('Delete child account error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+module.exports = {
+  register,
+  login,
+  createChildAccount,
+  getChildAccounts,
+  resetChildPassword,
+  deleteChildAccount
 };

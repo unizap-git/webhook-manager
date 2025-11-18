@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import VendorsPage from './pages/VendorsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ProfilePage from './pages/ProfilePage';
+import ChildAccountsPage from './pages/ChildAccountsPage';
 
 // Layout
 import Layout from './components/Layout';
@@ -24,11 +25,30 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+// Parent-only Route component
+const ParentOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, user } = useAuthStore((state) => state);
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (user?.accountType === 'CHILD') {
+    return <Navigate to="/analytics" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 // Public Route component (redirect if authenticated)
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { isAuthenticated, user } = useAuthStore((state) => state);
   
   if (isAuthenticated) {
+    // Redirect child accounts to analytics, parent accounts to dashboard
+    if (user?.accountType === 'CHILD') {
+      return <Navigate to="/analytics" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -36,6 +56,8 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function App() {
+  const { user } = useAuthStore();
+
   return (
     <Routes>
       {/* Public routes */}
@@ -65,15 +87,53 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="vendors" element={<VendorsPage />} />
+        <Route 
+          index 
+          element={
+            user?.accountType === 'CHILD' 
+              ? <Navigate to="/analytics" replace /> 
+              : <Navigate to="/dashboard" replace />
+          } 
+        />
+        {/* Parent-only routes */}
+        <Route 
+          path="dashboard" 
+          element={
+            <ParentOnlyRoute>
+              <DashboardPage />
+            </ParentOnlyRoute>
+          } 
+        />
+        <Route 
+          path="vendors" 
+          element={
+            <ParentOnlyRoute>
+              <VendorsPage />
+            </ParentOnlyRoute>
+          } 
+        />
+        <Route 
+          path="child-accounts" 
+          element={
+            <ParentOnlyRoute>
+              <ChildAccountsPage />
+            </ParentOnlyRoute>
+          } 
+        />
+        {/* Routes accessible to both parent and child accounts */}
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 
       {/* Catch all route */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route 
+        path="*" 
+        element={
+          user?.accountType === 'CHILD' 
+            ? <Navigate to="/analytics" replace /> 
+            : <Navigate to="/dashboard" replace />
+        } 
+      />
     </Routes>
   );
 }

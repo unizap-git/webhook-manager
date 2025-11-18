@@ -22,10 +22,10 @@ import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
   Analytics as AnalyticsIcon,
-  Settings as SettingsIcon,
   AccountCircle as AccountIcon,
   Logout as LogoutIcon,
   Webhook as WebhookIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 
@@ -40,6 +40,11 @@ interface NavItem {
 const navItems: NavItem[] = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Vendors & Channels', icon: <WebhookIcon />, path: '/vendors' },
+  { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
+  { text: 'Child Accounts', icon: <PeopleIcon />, path: '/child-accounts' },
+];
+
+const childNavItems: NavItem[] = [
   { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
 ];
 
@@ -85,7 +90,7 @@ const Layout: React.FC = () => {
       </Toolbar>
       <Divider />
       <List>
-        {navItems.map((item) => (
+        {(user?.accountType === 'CHILD' ? childNavItems : navItems).map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               selected={location.pathname === item.path}

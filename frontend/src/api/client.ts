@@ -31,31 +31,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      const refreshToken = useAuthStore.getState().refreshToken;
-      
-      if (refreshToken) {
-        try {
-          // Try to refresh token
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
-          });
-          
-          const newToken = response.data.tokens.accessToken;
-          useAuthStore.getState().setTokens(newToken, response.data.tokens.refreshToken);
-          
-          // Retry the original request
-          error.config.headers.Authorization = `Bearer ${newToken}`;
-          return api.request(error.config);
-        } catch (refreshError) {
-          // Refresh failed, logout user
-          useAuthStore.getState().logout();
-          window.location.href = '/login';
-        }
-      } else {
-        // No refresh token, logout user
-        useAuthStore.getState().logout();
-        window.location.href = '/login';
-      }
+      // Token is invalid or expired, logout user
+      useAuthStore.getState().logout();
+      window.location.href = '/login';
     }
     
     return Promise.reject(error);

@@ -24,7 +24,7 @@ import { useSnackbar } from 'notistack';
 
 import { useAuthStore } from '../store/authStore';
 import { apiCall } from '../api/client';
-import { AuthResponse } from '../types/api';
+import { LoginResponse } from '../types/api';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -55,9 +55,9 @@ const LoginPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      const response = await apiCall<AuthResponse>('post', '/auth/login', data);
+      const response = await apiCall<LoginResponse>('post', '/user/login', data);
 
-      login(response.user, response.tokens.accessToken, response.tokens.refreshToken);
+      login(response.user, response.token);
       
       enqueueSnackbar('Login successful!', { variant: 'success' });
       navigate('/dashboard');

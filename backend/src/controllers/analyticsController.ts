@@ -6,12 +6,15 @@ interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
+    accountType: string;
+    parentId?: string;
   };
+  effectiveUserId?: string;
 }
 
 export const getDashboardStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     const { period = '7d', vendorId, channelId } = req.query;
 
     // Calculate date range
@@ -157,7 +160,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
 
 export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     const { 
       startDate, 
       endDate, 
@@ -263,7 +266,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFu
 
 export const getEventAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     const { period = '7d', vendorId, channelId } = req.query;
 
     // Calculate date range
@@ -384,7 +387,7 @@ export const getEventAnalytics = async (req: AuthRequest, res: Response, next: N
 
 export const getDebugEventData = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     const { limit = 50 } = req.query;
 
     if (!userId) {
@@ -505,7 +508,7 @@ export const getDebugEventData = async (req: AuthRequest, res: Response, next: N
 // Enhanced Vendor-Channel Analytics
 export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -658,7 +661,7 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
 // Channel-wise Analytics
 export const getChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -848,7 +851,7 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
 // Failure Reason Analytics
 export const getFailureAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.effectiveUserId;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }

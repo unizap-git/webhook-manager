@@ -5,24 +5,22 @@ import { User } from '../types/api';
 interface AuthState {
   user: User | null;
   token: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   
   // Actions
   setUser: (user: User) => void;
-  setTokens: (token: string, refreshToken: string) => void;
+  setToken: (token: string) => void;
   setLoading: (loading: boolean) => void;
-  login: (user: User, token: string, refreshToken: string) => void;
+  login: (user: User, token: string) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       token: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
 
@@ -30,19 +28,18 @@ export const useAuthStore = create<AuthState>()(
         set({ user, isAuthenticated: true });
       },
 
-      setTokens: (token: string, refreshToken: string) => {
-        set({ token, refreshToken });
+      setToken: (token: string) => {
+        set({ token });
       },
 
       setLoading: (isLoading: boolean) => {
         set({ isLoading });
       },
 
-      login: (user: User, token: string, refreshToken: string) => {
+      login: (user: User, token: string) => {
         set({
           user,
           token,
-          refreshToken,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -52,7 +49,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           token: null,
-          refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
         });
@@ -63,7 +59,6 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }

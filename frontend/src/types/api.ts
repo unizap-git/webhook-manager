@@ -2,8 +2,49 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  accountType: 'PARENT' | 'CHILD';
+  parentId?: string;
+  parent?: {
+    id: string;
+    email: string;
+    name: string;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChildAccount {
+  id: string;
+  email: string;
+  name: string;
+  accountType: 'CHILD';
+  createdAt: string;
+  password?: string; // Only included when creating new child account
+}
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+  token: string;
+  user: User;
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  message: string;
+  token: string;
+  user: User;
+}
+
+export interface CreateChildAccountResponse {
+  success: boolean;
+  message: string;
+  childAccount: ChildAccount;
+}
+
+export interface GetChildAccountsResponse {
+  success: boolean;
+  childAccounts: ChildAccount[];
 }
 
 export interface Vendor {

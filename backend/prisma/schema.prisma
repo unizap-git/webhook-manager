@@ -11,17 +11,21 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  name        String?
+  email       String   @unique
+  password    String
+  accountType String   @default("PARENT") @map("account_type") // PARENT or CHILD
+  parentId    String?  @map("parent_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
+  parent             User?               @relation("ParentChild", fields: [parentId], references: [id], onDelete: Cascade)
+  childAccounts      User[]              @relation("ParentChild")
   userVendorChannels UserVendorChannel[]
-  messages          Message[]
-  analyticsCache    AnalyticsCache[]
+  messages           Message[]
+  analyticsCache     AnalyticsCache[]
 
   @@map("users")
 }

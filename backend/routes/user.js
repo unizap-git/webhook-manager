@@ -1,16 +1,15 @@
-import { Router } from 'express';
-import { 
-  getUserProfile,
+const express = require('express');
+const {
   register,
   login,
   createChildAccount,
   getChildAccounts,
   resetChildPassword,
   deleteChildAccount
-} from '../controllers/userController';
-import { authenticateToken, requireParentAccount } from '../middleware/auth';
+} = require('../controllers/userController');
+const { authenticateToken, requireParentAccount } = require('../middleware/auth');
 
-const router = Router();
+const router = express.Router();
 
 // Public routes
 router.post('/register', register);
@@ -19,13 +18,10 @@ router.post('/login', login);
 // Protected routes - require authentication
 router.use(authenticateToken);
 
-// User profile route
-router.get('/profile', getUserProfile);
-
 // Parent-only routes
 router.post('/child-accounts', requireParentAccount, createChildAccount);
 router.get('/child-accounts', requireParentAccount, getChildAccounts);
 router.post('/child-accounts/:childId/reset-password', requireParentAccount, resetChildPassword);
 router.delete('/child-accounts/:childId', requireParentAccount, deleteChildAccount);
 
-export default router;
+module.exports = router;

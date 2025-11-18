@@ -24,7 +24,7 @@ import { useSnackbar } from 'notistack';
 
 import { useAuthStore } from '../store/authStore';
 import { apiCall } from '../api/client';
-import { AuthResponse } from '../types/api';
+import { RegisterResponse } from '../types/api';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name is too long'),
@@ -65,9 +65,9 @@ const SignupPage: React.FC = () => {
       setError(null);
 
       const { confirmPassword, ...signupData } = data;
-      const response = await apiCall<AuthResponse>('post', '/auth/signup', signupData);
+      const response = await apiCall<RegisterResponse>('post', '/user/register', signupData);
 
-      login(response.user, response.tokens.accessToken, response.tokens.refreshToken);
+      login(response.user, response.token);
       
       enqueueSnackbar('Account created successfully!', { variant: 'success' });
       navigate('/dashboard');

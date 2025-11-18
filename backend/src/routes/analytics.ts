@@ -8,12 +8,13 @@ import {
   getChannelAnalytics,
   getFailureAnalytics
 } from '../controllers/analyticsController';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, getEffectiveUserId } from '../middleware/auth';
 
 const router = Router();
 
-// All analytics routes require authentication
+// All analytics routes require authentication and effective user ID
 router.use(authenticateToken);
+router.use(getEffectiveUserId);
 
 // Routes
 router.get('/dashboard', getDashboardStats);

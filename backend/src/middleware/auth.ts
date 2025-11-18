@@ -2,16 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/database';
 import { logger } from '../utils/logger';
+import { prisma } from '../config/database';
 
 interface JwtPayload {
   userId: string;
   email: string;
+  accountType: string;
+  parentId?: string;
 }
 
 declare global {
   namespace Express {
     interface Request {
       user?: JwtPayload;
+      effectiveUserId?: string;
     }
   }
 }
@@ -32,7 +36,30 @@ export const authenticateToken = async (
     }
 
     const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
-    req.user = decoded;
+    
+    // Get user from database to ensure they still exist and get latest info
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        accountType: true,
+        parentId: true,
+        name: true
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token - user not found' });
+    }
+
+    req.user = {
+      userId: user.id,
+      email: user.email,
+      accountType: user.accountType,
+      parentId: user.parentId
+    };
+
     next();
   } catch (error) {
     logger.error('JWT verification failed:', error);
@@ -74,4 +101,31 @@ export const optionalAuth = async (
     // Ignore auth errors for optional auth
     next();
   }
+};
+
+// Middleware to ensure only parent accounts can access certain routes
+export const requireParentAccount = (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.accountType !== 'PARENT') {
+    return res.status(403).json({ error: 'This action requires a parent account' });
+  }
+  next();
+};
+
+// Middleware to ensure only child accounts can access certain routes
+export const requireChildAccount = (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.accountType !== 'CHILD') {
+    return res.status(403).json({ error: 'This action requires a child account' });
+  }
+  next();
+};
+
+// Middleware to get the effective user ID (parent for child accounts, self for parent accounts)
+// This is useful for analytics where child accounts should see parent's data
+export const getEffectiveUserId = (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.accountType === 'CHILD') {
+    req.effectiveUserId = req.user.parentId;
+  } else {
+    req.effectiveUserId = req.user?.userId;
+  }
+  next();
 };
