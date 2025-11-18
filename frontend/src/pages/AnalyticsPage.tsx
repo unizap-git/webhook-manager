@@ -5,12 +5,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CircularProgress,
-  Alert,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Chip,
   LinearProgress,
   Table,
@@ -36,8 +30,10 @@ import {
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import VendorChannelAnalytics from '../components/VendorChannelAnalytics';
-import ChannelAnalytics from '../components/ChannelAnalytics';
 import FailureAnalytics from '../components/FailureAnalytics';
+import LoadingState from '../components/LoadingState';
+import DateRangeFilter from '../components/DateRangeFilter';
+import { formatPercentage, PerformanceChip } from '../utils/analyticsUtils';
 
 interface AnalyticsSummary {
   totalMessages: number;
@@ -104,8 +100,7 @@ const AnalyticsPage: React.FC = () => {
     fetchAnalytics(period);
   }, [period]);
 
-  const handlePeriodChange = (event: any) => {
-    const newPeriod = event.target.value;
+  const handlePeriodChange = (newPeriod: string, customRange?: any) => {
     setPeriod(newPeriod);
   };
 
@@ -113,37 +108,9 @@ const AnalyticsPage: React.FC = () => {
     setTabValue(newValue);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const formatPercentage = (value: number) => {
-    return `${value.toFixed(1)}%`;
-  };
-
   const renderOverviewTab = () => {
-    if (loading) {
-      return (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
-        </Box>
-      );
-    }
-
-    if (error) {
-      return (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
-      );
-    }
-
     if (!analyticsData) {
-      return (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          No analytics data available.
-        </Alert>
-      );
+      return null;
     }
 
     const { summary, dailyStats, vendorStats } = analyticsData;
@@ -245,11 +212,10 @@ const AnalyticsPage: React.FC = () => {
                   <Typography variant="h4" color="success.main">
                     {formatPercentage(summary.deliveryRate)}
                   </Typography>
-                  <Chip 
-                    label={summary.deliveryRate >= 90 ? "Excellent" : summary.deliveryRate >= 70 ? "Good" : "Needs Improvement"} 
-                    color={summary.deliveryRate >= 90 ? "success" : summary.deliveryRate >= 70 ? "warning" : "error"}
-                    size="small"
+                  <PerformanceChip 
+                    value={summary.deliveryRate}
                     sx={{ ml: 2 }}
+                    showIcon
                   />
                 </Box>
                 <LinearProgress 
@@ -352,11 +318,7 @@ const AnalyticsPage: React.FC = () => {
                         <TableCell align="right">{vendor.totalRead}</TableCell>
                         <TableCell align="right">{vendor.totalFailed}</TableCell>
                         <TableCell align="right">
-                          <Chip
-                            label={formatPercentage(vendor.successRate)}
-                            color={vendor.successRate >= 90 ? "success" : vendor.successRate >= 70 ? "warning" : "error"}
-                            size="small"
-                          />
+                          <PerformanceChip value={vendor.successRate} />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -391,7 +353,7 @@ const AnalyticsPage: React.FC = () => {
                     {dailyStats.map((day, index) => (
                       <TableRow key={index}>
                         <TableCell component="th" scope="row">
-                          {formatDate(day.date)}
+                          {new Date(day.date).toLocaleDateString()}
                         </TableCell>
                         <TableCell align="right">{day.totalMessages}</TableCell>
                         <TableCell align="right">{day.totalSent}</TableCell>
@@ -399,11 +361,7 @@ const AnalyticsPage: React.FC = () => {
                         <TableCell align="right">{day.totalRead}</TableCell>
                         <TableCell align="right">{day.totalFailed}</TableCell>
                         <TableCell align="right">
-                          <Chip
-                            label={formatPercentage(day.successRate)}
-                            color={day.successRate >= 90 ? "success" : day.successRate >= 70 ? "warning" : "error"}
-                            size="small"
-                          />
+                          <PerformanceChip value={day.successRate} />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -424,19 +382,10 @@ const AnalyticsPage: React.FC = () => {
           Communication Analytics
         </Typography>
         
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>Period</InputLabel>
-          <Select
-            value={period}
-            label="Period"
-            onChange={handlePeriodChange}
-          >
-            <MenuItem value="1d">Last Day</MenuItem>
-            <MenuItem value="7d">Last 7 Days</MenuItem>
-            <MenuItem value="30d">Last 30 Days</MenuItem>
-            <MenuItem value="90d">Last 90 Days</MenuItem>
-          </Select>
-        </FormControl>
+        <DateRangeFilter 
+          value={period} 
+          onChange={handlePeriodChange}
+        />
       </Box>
 
       <Paper sx={{ mb: 3 }}>
@@ -452,13 +401,8 @@ const AnalyticsPage: React.FC = () => {
             iconPosition="start"
           />
           <Tab 
-            label="Vendor-Channel Matrix" 
+            label="Channel Performance" 
             icon={<Compare />}
-            iconPosition="start"
-          />
-          <Tab 
-            label="Channel Analysis" 
-            icon={<Analytics />}
             iconPosition="start"
           />
           <Tab 
@@ -470,10 +414,11 @@ const AnalyticsPage: React.FC = () => {
       </Paper>
 
       {/* Tab Content */}
-      {tabValue === 0 && renderOverviewTab()}
-      {tabValue === 1 && <VendorChannelAnalytics />}
-      {tabValue === 2 && <ChannelAnalytics />}
-      {tabValue === 3 && <FailureAnalytics />}
+      <LoadingState loading={loading} error={error}>
+        {tabValue === 0 && renderOverviewTab()}
+        {tabValue === 1 && <VendorChannelAnalytics />}
+        {tabValue === 2 && <FailureAnalytics />}
+      </LoadingState>
     </Box>
   );
 };
