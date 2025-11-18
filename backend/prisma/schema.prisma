@@ -34,34 +34,34 @@ model User {
 }
 
 model Vendor {
-  id        String @id @default(cuid())
-  name      String @unique // msg91, karix, aisensy, sendgrid
-  slug      String @unique // url-friendly version
-  projectId String @map("project_id")
+  id          String  @id @default(cuid())
+  name        String  @unique // msg91, karix, aisensy, sendgrid
+  slug        String  @unique // url-friendly version
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
-  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
 
-  @@unique([name, projectId])
   @@map("vendors")
 }
 
 model Channel {
-  id        String @id @default(cuid())
-  type      String // sms, whatsapp, email
-  name      String
-  projectId String @map("project_id")
+  id          String  @id @default(cuid())
+  name        String  @unique // SMS, WhatsApp, Email
+  type        String  // sms, whatsapp, email  
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
-  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
 
-  @@unique([type, projectId])
   @@map("channels")
 }
 
@@ -155,8 +155,6 @@ model Project {
   // Relations
   owner              User                @relation("ProjectOwner", fields: [userId], references: [id], onDelete: Cascade)
   projectAccess      ProjectAccess[]
-  vendors            Vendor[]
-  channels           Channel[]
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]

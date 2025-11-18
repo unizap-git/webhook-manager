@@ -12,34 +12,38 @@ interface AuthRequest extends Request {
 
 export const getVendors = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { projectId } = req.query;
-    
-    let vendors;
-    if (projectId) {
-      // Get vendors for a specific project
-      vendors = await prisma.vendor.findMany({
-        where: {
-          projectId: projectId as string,
-        },
-        orderBy: { name: 'asc' },
-      });
-    } else {
-      // Get all available vendor names (for creating new vendors)
-      vendors = await prisma.vendor.findMany({
-        select: {
-          name: true,
-          slug: true,
-        },
-        distinct: ['name'],
-        orderBy: { name: 'asc' },
-      });
-    }
+    // Get all global vendors
+    const vendors = await prisma.vendor.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    });
 
     res.json({
       vendors,
     });
   } catch (error) {
     logger.error('Get vendors error:', error);
+    next(error);
+  }
+};
+
+export const getChannels = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Get all global channels
+    const channels = await prisma.channel.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    res.json({
+      channels,
+    });
+  } catch (error) {
+    logger.error('Get channels error:', error);
     next(error);
   }
 };
@@ -70,7 +74,7 @@ export const getUserVendorChannels = async (req: AuthRequest, res: Response, nex
       orderBy: [
         { project: { name: 'asc' } },
         { vendor: { name: 'asc' } },
-        { channel: { type: 'asc' } },
+        { channel: { name: 'asc' } },
       ],
     });
 
@@ -86,11 +90,11 @@ export const getUserVendorChannels = async (req: AuthRequest, res: Response, nex
 export const addUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.userId;
-    const { vendorId, channelId, projectId, vendorName, channelType } = req.body;
+    const { vendorId, channelId, projectId } = req.body;
 
-    if (!projectId) {
+    if (!projectId || !vendorId || !channelId) {
       return res.status(400).json({
-        error: 'projectId is required',
+        error: 'projectId, vendorId, and channelId are required',
       });
     }
 
@@ -117,63 +121,14 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
       });
     }
 
-    let vendor, channel;
+    // Verify vendor and channel exist
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+    });
 
-    // If vendorId and channelId are provided, use them
-    if (vendorId && channelId) {
-      vendor = await prisma.vendor.findFirst({
-        where: { 
-          id: vendorId,
-          projectId,
-        },
-      });
-
-      channel = await prisma.channel.findFirst({
-        where: { 
-          id: channelId,
-          projectId,
-        },
-      });
-    } else if (vendorName && channelType) {
-      // Create vendor and channel if they don't exist
-      vendor = await prisma.vendor.findFirst({
-        where: {
-          name: vendorName,
-          projectId,
-        },
-      });
-
-      if (!vendor) {
-        vendor = await prisma.vendor.create({
-          data: {
-            name: vendorName,
-            slug: vendorName.toLowerCase().replace(/\s+/g, '-'),
-            projectId,
-          },
-        });
-      }
-
-      channel = await prisma.channel.findFirst({
-        where: {
-          type: channelType,
-          projectId,
-        },
-      });
-
-      if (!channel) {
-        channel = await prisma.channel.create({
-          data: {
-            type: channelType,
-            name: channelType,
-            projectId,
-          },
-        });
-      }
-    } else {
-      return res.status(400).json({
-        error: 'Either (vendorId and channelId) or (vendorName and channelType) are required',
-      });
-    }
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+    });
 
     if (!vendor || !channel) {
       return res.status(404).json({
@@ -197,9 +152,9 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
       });
     }
 
-    // Generate unique webhook URL using new project-based format
+    // Generate unique webhook URL using project-based format
     const webhookToken = uuidv4();
-    const webhookUrl = `${config.webhook.baseUrl}/api/webhook/${project.name}/${vendor.name}/${channel.name}?token=${webhookToken}`;
+    const webhookUrl = `${config.webhook.baseUrl}/api/webhook/${project.name}/${vendor.slug}/${channel.type}?token=${webhookToken}`;
 
     // Create user vendor channel mapping
     const userConfig = await prisma.userVendorChannel.create({

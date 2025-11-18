@@ -1,8 +1,15 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '../config/database';
 
-const prisma = new PrismaClient();
+interface AuthRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+    accountType: string;
+    parentId?: string;
+  };
+}
 
 // Validation schemas
 const createProjectSchema = z.object({
@@ -59,7 +66,7 @@ export const createProject = async (req: Request, res: Response) => {
 };
 
 // Get all projects for the authenticated user
-export const getProjects = async (req: Request, res: Response) => {
+export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const userType = req.user?.accountType;
@@ -72,16 +79,16 @@ export const getProjects = async (req: Request, res: Response) => {
 
     if (userType === 'PARENT') {
       // Parent users see their own projects
-      projects = await prisma.project.findMany({
+      projects = await (prisma as any).project.findMany({
         where: {
           userId,
         },
         include: {
           _count: {
             select: {
-              vendors: true,
-              channels: true,
+              userVendorChannels: true,
               messages: true,
+              projectAccess: true,
             },
           },
         },
@@ -91,7 +98,7 @@ export const getProjects = async (req: Request, res: Response) => {
       });
     } else {
       // Child users see projects they have access to
-      const projectAccess = await prisma.projectAccess.findMany({
+      const projectAccess = await (prisma as any).projectAccess.findMany({
         where: {
           userId,
         },
@@ -100,9 +107,9 @@ export const getProjects = async (req: Request, res: Response) => {
             include: {
               _count: {
                 select: {
-                  vendors: true,
-                  channels: true,
+                  userVendorChannels: true,
                   messages: true,
+                  projectAccess: true,
                 },
               },
             },
@@ -110,13 +117,15 @@ export const getProjects = async (req: Request, res: Response) => {
         },
       });
 
-      projects = projectAccess.map(access => access.project);
+      projects = projectAccess.map((access: any) => access.project);
     }
 
     res.json({ projects });
+    return;
   } catch (error) {
     console.error('Error fetching projects:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
+    return;
   }
 };
 
@@ -153,14 +162,10 @@ export const getProject = async (req: Request, res: Response) => {
     const project = await prisma.project.findFirst({
       where: whereClause,
       include: {
-        vendors: true,
-        channels: true,
         _count: {
           select: {
-            vendors: true,
-            channels: true,
-            messages: true,
             userVendorChannels: true,
+            messages: true,
           },
         },
       },
