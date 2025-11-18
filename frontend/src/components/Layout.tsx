@@ -22,12 +22,15 @@ import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
   Analytics as AnalyticsIcon,
+  Business as ProjectIcon,
   AccountCircle as AccountIcon,
   Logout as LogoutIcon,
   Webhook as WebhookIcon,
   People as PeopleIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
+import { useProject } from '../contexts/ProjectContext';
+import { ProjectSelector } from './projects/ProjectSelector';
 
 const drawerWidth = 240;
 
@@ -39,6 +42,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+  { text: 'Projects', icon: <ProjectIcon />, path: '/projects' },
   { text: 'Vendors & Channels', icon: <WebhookIcon />, path: '/vendors' },
   { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
   { text: 'Child Accounts', icon: <PeopleIcon />, path: '/child-accounts' },
@@ -54,6 +58,7 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { selectedProjectId, setSelectedProjectId } = useProject();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -140,6 +145,18 @@ const Layout: React.FC = () => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Communication Analytics
           </Typography>
+          
+          {/* Project Selector - show only on analytics, dashboard and projects pages */}
+          {(location.pathname === '/analytics' || location.pathname === '/dashboard' || location.pathname === '/projects') && (
+            <Box sx={{ mx: 2 }}>
+              <ProjectSelector
+                selectedProjectId={selectedProjectId}
+                onProjectChange={setSelectedProjectId}
+                size="small"
+              />
+            </Box>
+          )}
+          
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="body2">{user?.name}</Typography>
             <IconButton

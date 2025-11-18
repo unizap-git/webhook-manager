@@ -17,10 +17,13 @@ export async function processWebhookPayload(
   webhookData: WebhookPayload,
   userId: string,
   vendorSlug: string,
-  channelType: string
+  channelType: string,
+  projectId?: string,
+  vendorId?: string,
+  channelId?: string
 ) {
   try {
-    // Verify user and get vendor/channel info
+    // Verify user
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -29,28 +32,51 @@ export async function processWebhookPayload(
       throw new Error(`User not found: ${userId}`);
     }
 
-    const vendor = await prisma.vendor.findUnique({
-      where: { slug: vendorSlug },
-    });
+    let vendor, channel;
 
-    const channel = await prisma.channel.findUnique({
-      where: { type: channelType },
-    });
+    // If IDs are provided (new project-based routing), use them
+    if (vendorId && channelId && projectId) {
+      vendor = await prisma.vendor.findUnique({
+        where: { id: vendorId },
+      });
+      channel = await prisma.channel.findUnique({
+        where: { id: channelId },
+      });
+    } else {
+      // Fallback to old slug-based lookup for backward compatibility
+      vendor = await prisma.vendor.findFirst({
+        where: { slug: vendorSlug },
+      });
+      channel = await prisma.channel.findFirst({
+        where: { type: channelType },
+      });
+    }
 
     if (!vendor || !channel) {
       throw new Error(`Vendor or channel not found: ${vendorSlug}/${channelType}`);
     }
 
     // Verify webhook URL exists for this user-vendor-channel combination
-    const config = await prisma.userVendorChannel.findUnique({
-      where: {
-        userId_vendorId_channelId: {
+    let config;
+    if (projectId) {
+      config = await prisma.userVendorChannel.findFirst({
+        where: {
+          userId,
+          vendorId: vendor.id,
+          channelId: channel.id,
+          projectId,
+        },
+      });
+    } else {
+      // Fallback for old format
+      config = await prisma.userVendorChannel.findFirst({
+        where: {
           userId,
           vendorId: vendor.id,
           channelId: channel.id,
         },
-      },
-    });
+      });
+    }
 
     if (!config) {
       throw new Error(`No webhook configuration found for user ${userId}, vendor ${vendorSlug}, channel ${channelType}`);
@@ -65,13 +91,19 @@ export async function processWebhookPayload(
     const parsedData = parser(webhookData, channelType);
 
     // Create or update message
+    let whereClause: any = {
+      userId,
+      vendorId: vendor.id,
+      channelId: channel.id,
+      messageId: parsedData.messageId,
+    };
+
+    if (projectId) {
+      whereClause.projectId = projectId;
+    }
+
     let message = await prisma.message.findFirst({
-      where: {
-        userId,
-        vendorId: vendor.id,
-        channelId: channel.id,
-        messageId: parsedData.messageId,
-      },
+      where: whereClause,
     });
 
     if (!message) {
@@ -80,6 +112,7 @@ export async function processWebhookPayload(
           userId,
           vendorId: vendor.id,
           channelId: channel.id,
+          projectId: projectId || config.projectId, // Use provided projectId or fallback to config
           recipient: parsedData.recipient || 'unknown',
           messageId: parsedData.messageId || `${Date.now()}`,
           contentSummary: parsedData.contentSummary || 'No content summary',
@@ -101,7 +134,7 @@ export async function processWebhookPayload(
     logger.info(`Processed webhook for message ${parsedData.messageId}: ${parsedData.status}`);
 
     // Update analytics cache (could be done in a separate job)
-    await updateAnalyticsCache(userId, vendor.id, channel.id);
+    await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId);
 
   } catch (error) {
     logger.error('Webhook processing error:', error);
@@ -311,24 +344,30 @@ function mapSendGridStatus(event: string): string {
   return statusMap[event?.toLowerCase()] || 'sent';
 }
 
-async function updateAnalyticsCache(userId: string, vendorId: string, channelId: string) {
+async function updateAnalyticsCache(userId: string, vendorId: string, channelId: string, projectId?: string) {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // Get message counts for today
+    let whereClause: any = {
+      message: {
+        userId,
+        vendorId,
+        channelId,
+      },
+      timestamp: {
+        gte: today,
+      },
+    };
+
+    if (projectId) {
+      whereClause.message.projectId = projectId;
+    }
+
     const counts = await prisma.messageEvent.groupBy({
       by: ['status'],
-      where: {
-        message: {
-          userId,
-          vendorId,
-          channelId,
-        },
-        timestamp: {
-          gte: today,
-        },
-      },
+      where: whereClause,
       _count: {
         status: true,
       },
@@ -360,27 +399,41 @@ async function updateAnalyticsCache(userId: string, vendorId: string, channelId:
     const total = totalSent + totalDelivered + totalRead + totalFailed;
     const successRate = total > 0 ? ((totalDelivered + totalRead) / total) * 100 : 0;
 
+    // Build cache where clause
+    let cacheWhereClause: any = {
+      userId,
+      vendorId,
+      channelId,
+      date: today,
+    };
+
+    if (projectId) {
+      cacheWhereClause.projectId = projectId;
+    }
+
+    // Build cache data
+    let cacheData: any = {
+      userId,
+      vendorId,
+      channelId,
+      date: today,
+      totalSent,
+      totalDelivered,
+      totalRead,
+      totalFailed,
+      successRate,
+    };
+
+    if (projectId) {
+      cacheData.projectId = projectId;
+    }
+
     // Upsert analytics cache
     await prisma.analyticsCache.upsert({
       where: {
-        userId_vendorId_channelId_date: {
-          userId,
-          vendorId,
-          channelId,
-          date: today,
-        },
+        userId_vendorId_channelId_projectId_date: cacheWhereClause,
       },
-      create: {
-        userId,
-        vendorId,
-        channelId,
-        date: today,
-        totalSent,
-        totalDelivered,
-        totalRead,
-        totalFailed,
-        successRate,
-      },
+      create: cacheData,
       update: {
         totalSent,
         totalDelivered,

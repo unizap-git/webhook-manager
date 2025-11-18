@@ -23,6 +23,9 @@ model User {
   // Relations
   parent             User?               @relation("ParentChild", fields: [parentId], references: [id], onDelete: Cascade)
   childAccounts      User[]              @relation("ParentChild")
+  projects           Project[]           @relation("ProjectOwner")
+  projectAccess      ProjectAccess[]     @relation("UserAccess")
+  grantedAccess      ProjectAccess[]     @relation("UserGrantedBy")
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
@@ -31,28 +34,34 @@ model User {
 }
 
 model Vendor {
-  id   String @id @default(cuid())
-  name String @unique // msg91, karix, aisensy, sendgrid
-  slug String @unique // url-friendly version
+  id        String @id @default(cuid())
+  name      String @unique // msg91, karix, aisensy, sendgrid
+  slug      String @unique // url-friendly version
+  projectId String @map("project_id")
 
   // Relations
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userVendorChannels UserVendorChannel[]
-  messages          Message[]
-  analyticsCache    AnalyticsCache[]
+  messages           Message[]
+  analyticsCache     AnalyticsCache[]
 
+  @@unique([name, projectId])
   @@map("vendors")
 }
 
 model Channel {
-  id   String @id @default(cuid())
-  type String @unique // sms, whatsapp, email
-  name String
+  id        String @id @default(cuid())
+  type      String // sms, whatsapp, email
+  name      String
+  projectId String @map("project_id")
 
   // Relations
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userVendorChannels UserVendorChannel[]
-  messages          Message[]
-  analyticsCache    AnalyticsCache[]
+  messages           Message[]
+  analyticsCache     AnalyticsCache[]
 
+  @@unique([type, projectId])
   @@map("channels")
 }
 
@@ -61,6 +70,7 @@ model UserVendorChannel {
   userId     String @map("user_id")
   vendorId   String @map("vendor_id")
   channelId  String @map("channel_id")
+  projectId  String @map("project_id")
   webhookUrl String @unique @map("webhook_url")
   isActive   Boolean @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -69,8 +79,9 @@ model UserVendorChannel {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   vendor  Vendor  @relation(fields: [vendorId], references: [id])
   channel Channel @relation(fields: [channelId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, vendorId, channelId])
+  @@unique([userId, vendorId, channelId, projectId])
   @@map("user_vendor_channels")
 }
 
@@ -79,6 +90,7 @@ model Message {
   userId         String    @map("user_id")
   vendorId       String    @map("vendor_id")
   channelId      String    @map("channel_id")
+  projectId      String    @map("project_id")
   recipient      String
   messageId      String?   @map("message_id") // vendor-provided message ID
   contentSummary String?   @map("content_summary")
@@ -88,6 +100,7 @@ model Message {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   vendor  Vendor  @relation(fields: [vendorId], references: [id])
   channel Channel @relation(fields: [channelId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   events  MessageEvent[]
 
   @@map("messages")
@@ -112,6 +125,7 @@ model AnalyticsCache {
   userId         String   @map("user_id")
   vendorId       String?  @map("vendor_id")
   channelId      String?  @map("channel_id")
+  projectId      String?  @map("project_id")
   date           DateTime
   totalSent      Int      @default(0) @map("total_sent")
   totalDelivered Int      @default(0) @map("total_delivered")
@@ -124,7 +138,46 @@ model AnalyticsCache {
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   vendor  Vendor?  @relation(fields: [vendorId], references: [id])
   channel Channel? @relation(fields: [channelId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, vendorId, channelId, date])
+  @@unique([userId, vendorId, channelId, projectId, date])
   @@map("analytics_cache")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String   @map("user_id") // Owner
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  owner              User                @relation("ProjectOwner", fields: [userId], references: [id], onDelete: Cascade)
+  projectAccess      ProjectAccess[]
+  vendors            Vendor[]
+  channels           Channel[]
+  userVendorChannels UserVendorChannel[]
+  messages           Message[]
+  analyticsCache     AnalyticsCache[]
+
+  @@unique([name, userId]) // Project names must be unique per user
+  @@map("projects")
+}
+
+model ProjectAccess {
+  id         String   @id @default(cuid())
+  projectId  String   @map("project_id")
+  userId     String   @map("user_id") // Child account
+  accessType String   @map("access_type") // 'specific' or 'all'
+  grantedBy  String   @map("granted_by") // Parent account who granted access
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation("UserAccess", fields: [userId], references: [id], onDelete: Cascade)
+  grantedByUser User @relation("UserGrantedBy", fields: [grantedBy], references: [id])
+
+  @@unique([projectId, userId]) // One access record per project-user pair
+  @@map("project_access")
 }

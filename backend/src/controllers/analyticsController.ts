@@ -55,7 +55,7 @@ const calculateDateRange = (period: string) => {
 export const getDashboardStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.effectiveUserId;
-    const { period = '7d', vendorId, channelId } = req.query;
+    const { period = '7d', vendorId, channelId, projectId } = req.query;
 
     // Calculate date range using helper function
     const { startDate, endDate } = calculateDateRange(period as string);
@@ -75,6 +75,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
 
     if (channelId) {
       whereClause.channelId = channelId as string;
+    }
+
+    if (projectId && projectId !== 'all') {
+      whereClause.projectId = projectId as string;
     }
 
     // Get aggregated stats
@@ -190,7 +194,8 @@ export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFu
       startDate, 
       endDate, 
       vendorId, 
-      channelId, 
+      channelId,
+      projectId,
       groupBy = 'day',
       limit = 100,
       offset = 0 
@@ -207,6 +212,10 @@ export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFu
 
     if (channelId) {
       whereClause.channelId = channelId as string;
+    }
+
+    if (projectId && projectId !== 'all') {
+      whereClause.projectId = projectId as string;
     }
 
     if (startDate && endDate) {
@@ -292,7 +301,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFu
 export const getEventAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.effectiveUserId;
-    const { period = '7d', vendorId, channelId } = req.query;
+    const { period = '7d', vendorId, channelId, projectId } = req.query;
 
     // Calculate date range
     const endDate = new Date();
@@ -329,6 +338,10 @@ export const getEventAnalytics = async (req: AuthRequest, res: Response, next: N
 
     if (channelId) {
       whereClause.message.channelId = channelId as string;
+    }
+
+    if (projectId && projectId !== 'all') {
+      whereClause.message.projectId = projectId as string;
     }
 
     // Get event name breakdown from raw payload
@@ -538,7 +551,7 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const { period = '7d', startDate, endDate } = req.query;
+    const { period = '7d', startDate, endDate, projectId } = req.query;
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
@@ -552,16 +565,23 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       endDate_calc = dateRange.endDate;
     }
 
+    // Build where clause for message events
+    const messageWhereClause: any = {
+      userId: userId,
+      createdAt: {
+        gte: startDate_calc,
+        lte: endDate_calc,
+      },
+    };
+
+    if (projectId && projectId !== 'all') {
+      messageWhereClause.projectId = projectId as string;
+    }
+
     // Get all message events with their raw payloads
     const messageEvents = await prisma.messageEvent.findMany({
       where: {
-        message: {
-          userId: userId,
-          createdAt: {
-            gte: startDate_calc,
-            lte: endDate_calc,
-          },
-        },
+        message: messageWhereClause,
       },
       include: {
         message: {
@@ -683,7 +703,7 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const { period = '7d', startDate, endDate } = req.query;
+    const { period = '7d', startDate, endDate, projectId } = req.query;
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
@@ -697,16 +717,23 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       endDate_calc = dateRange.endDate;
     }
 
+    // Build where clause for message events
+    const messageWhereClause: any = {
+      userId: userId,
+      createdAt: {
+        gte: startDate_calc,
+        lte: endDate_calc,
+      },
+    };
+
+    if (projectId && projectId !== 'all') {
+      messageWhereClause.projectId = projectId as string;
+    }
+
     // Get all message events grouped by channel
     const messageEvents = await prisma.messageEvent.findMany({
       where: {
-        message: {
-          userId: userId,
-          createdAt: {
-            gte: startDate_calc,
-            lte: endDate_calc,
-          },
-        },
+        message: messageWhereClause,
       },
       include: {
         message: {
@@ -865,7 +892,7 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const { period = '7d', startDate, endDate, vendorId, channelId } = req.query;
+    const { period = '7d', startDate, endDate, vendorId, channelId, projectId } = req.query;
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
@@ -897,6 +924,10 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
 
     if (channelId) {
       whereClause.message.channelId = channelId as string;
+    }
+
+    if (projectId && projectId !== 'all') {
+      whereClause.message.projectId = projectId as string;
     }
 
     // Get all failed message events
@@ -1069,3 +1100,138 @@ function mapEventNameToStatus(eventName: string): string {
   
   return eventMap[eventName.toLowerCase()] || 'sent';
 }
+
+// Get project-wise analytics summary
+export const getProjectAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.effectiveUserId;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { period = '7d' } = req.query;
+    const { startDate, endDate } = calculateDateRange(period as string);
+
+    // Get all user's projects
+    const projects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { userId: userId }, // User owns the project
+          { 
+            projectAccess: {
+              some: {
+                userId: userId,
+              },
+            },
+          }, // User has access to the project
+        ],
+      },
+      include: {
+        _count: {
+          select: {
+            messages: {
+              where: {
+                createdAt: {
+                  gte: startDate,
+                  lte: endDate,
+                },
+              },
+            },
+            vendors: true,
+            channels: true,
+          },
+        },
+      },
+    });
+
+    // Get analytics for each project
+    const projectAnalytics = await Promise.all(
+      projects.map(async (project) => {
+        // Get analytics cache for this project
+        const stats = await prisma.analyticsCache.aggregate({
+          where: {
+            userId,
+            projectId: project.id,
+            date: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          _sum: {
+            totalSent: true,
+            totalDelivered: true,
+            totalRead: true,
+            totalFailed: true,
+          },
+        });
+
+        const totalSent = stats._sum.totalSent || 0;
+        const totalDelivered = stats._sum.totalDelivered || 0;
+        const totalRead = stats._sum.totalRead || 0;
+        const totalFailed = stats._sum.totalFailed || 0;
+        const totalMessages = totalSent + totalDelivered + totalRead + totalFailed;
+
+        // Calculate rates
+        const deliveryRate = totalMessages > 0 ? (totalDelivered + totalRead) / totalMessages * 100 : 0;
+        const readRate = totalMessages > 0 ? totalRead / totalMessages * 100 : 0;
+        const failureRate = totalMessages > 0 ? totalFailed / totalMessages * 100 : 0;
+
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          description: project.description,
+          vendorCount: project._count.vendors,
+          channelCount: project._count.channels,
+          messageCount: project._count.messages,
+          totalMessages,
+          totalSent,
+          totalDelivered,
+          totalRead,
+          totalFailed,
+          deliveryRate: Math.round(deliveryRate * 100) / 100,
+          readRate: Math.round(readRate * 100) / 100,
+          failureRate: Math.round(failureRate * 100) / 100,
+        };
+      })
+    );
+
+    // Calculate overall totals
+    const overallStats = projectAnalytics.reduce(
+      (acc, project) => ({
+        totalProjects: acc.totalProjects + 1,
+        totalMessages: acc.totalMessages + project.totalMessages,
+        totalSent: acc.totalSent + project.totalSent,
+        totalDelivered: acc.totalDelivered + project.totalDelivered,
+        totalRead: acc.totalRead + project.totalRead,
+        totalFailed: acc.totalFailed + project.totalFailed,
+      }),
+      { totalProjects: 0, totalMessages: 0, totalSent: 0, totalDelivered: 0, totalRead: 0, totalFailed: 0 }
+    );
+
+    // Calculate overall rates
+    const overallDeliveryRate = overallStats.totalMessages > 0 ? 
+      (overallStats.totalDelivered + overallStats.totalRead) / overallStats.totalMessages * 100 : 0;
+    const overallReadRate = overallStats.totalMessages > 0 ? 
+      overallStats.totalRead / overallStats.totalMessages * 100 : 0;
+    const overallFailureRate = overallStats.totalMessages > 0 ? 
+      overallStats.totalFailed / overallStats.totalMessages * 100 : 0;
+
+    res.json({
+      projectAnalytics: projectAnalytics.sort((a, b) => b.totalMessages - a.totalMessages),
+      overallStats: {
+        ...overallStats,
+        deliveryRate: Math.round(overallDeliveryRate * 100) / 100,
+        readRate: Math.round(overallReadRate * 100) / 100,
+        failureRate: Math.round(overallFailureRate * 100) / 100,
+      },
+      period,
+      dateRange: {
+        startDate,
+        endDate,
+      },
+    });
+  } catch (error) {
+    logger.error('Project analytics error:', error);
+    next(error);
+  }
+};

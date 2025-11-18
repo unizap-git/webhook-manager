@@ -6,7 +6,8 @@ import {
   getDebugEventData,
   getVendorChannelAnalytics,
   getChannelAnalytics,
-  getFailureAnalytics
+  getFailureAnalytics,
+  getProjectAnalytics
 } from '../controllers/analyticsController';
 import { authenticateToken, getEffectiveUserId } from '../middleware/auth';
 
@@ -22,6 +23,7 @@ router.get('/events', getEventAnalytics);
 router.get('/vendor-channel', getVendorChannelAnalytics);
 router.get('/channels', getChannelAnalytics);
 router.get('/failures', getFailureAnalytics);
+router.get('/projects', getProjectAnalytics);
 router.get('/debug', getDebugEventData);
 router.get('/', getAnalytics);
 

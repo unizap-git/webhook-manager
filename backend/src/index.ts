@@ -17,6 +17,7 @@ import channelRoutes from './routes/channels';
 import webhookRoutes from './routes/webhook';
 import analyticsRoutes from './routes/analytics';
 import userRoutes from './routes/user';
+import projectRoutes from './routes/projects';
 
 // Services
 import { initializeWorkers } from './workers';
@@ -64,8 +65,23 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Debug endpoint to check database
+app.get('/debug/users', async (req, res) => {
+  try {
+    const { prisma } = await import('./config/database');
+    const userCount = await prisma.user.count();
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true, accountType: true }
+    });
+    res.json({ userCount, users });
+  } catch (error) {
+    res.status(500).json({ error: 'Database query failed', details: error });
+  }
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/webhook', webhookRoutes);

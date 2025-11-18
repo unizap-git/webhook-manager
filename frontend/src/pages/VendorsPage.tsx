@@ -30,22 +30,26 @@ import { useSnackbar } from 'notistack';
 
 import { apiCall } from '../api/client';
 import { Vendor, Channel, UserVendorChannel } from '../types/api';
+import { useProject } from '../contexts/ProjectContext';
 
 interface AddConfigFormData {
   vendorId: string;
   channelId: string;
+  projectId: string;
 }
 
 const VendorsPage: React.FC = () => {
   const [configs, setConfigs] = useState<UserVendorChannel[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
   const { enqueueSnackbar } = useSnackbar();
+  const { selectedProjectId, isAllProjects } = useProject();
 
   const {
     control,
@@ -63,15 +67,17 @@ const VendorsPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [configsData, vendorsData, channelsData] = await Promise.all([
+      const [configsData, vendorsData, channelsData, projectsData] = await Promise.all([
         apiCall<{ configs: UserVendorChannel[] }>('get', '/vendors/user-configs'),
         apiCall<{ vendors: Vendor[] }>('get', '/vendors'),
         apiCall<{ channels: Channel[] }>('get', '/channels'),
+        apiCall<{ projects: any[] }>('get', '/projects'),
       ]);
 
       setConfigs(configsData.configs);
       setVendors(vendorsData.vendors);
       setChannels(channelsData.channels);
+      setProjects(projectsData.projects);
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'Failed to load data';
       setError(errorMessage);
@@ -239,6 +245,24 @@ const VendorsPage: React.FC = () => {
           <DialogTitle>Add Vendor Configuration</DialogTitle>
           <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
+              <Controller
+                name="projectId"
+                control={control}
+                rules={{ required: 'Please select a project' }}
+                render={({ field }) => (
+                  <FormControl fullWidth error={!!errors.projectId}>
+                    <InputLabel>Project</InputLabel>
+                    <Select {...field} label="Project">
+                      {projects.map((project) => (
+                        <MenuItem key={project.id} value={project.id}>
+                          {project.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+              />
+
               <Controller
                 name="vendorId"
                 control={control}

@@ -6,6 +6,7 @@ import { useAuthStore } from './store/authStore';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
+import ProjectsPage from './pages/ProjectsPage';
 import VendorsPage from './pages/VendorsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ProfilePage from './pages/ProfilePage';
@@ -101,6 +102,14 @@ function App() {
           element={
             <ParentOnlyRoute>
               <DashboardPage />
+            </ParentOnlyRoute>
+          } 
+        />
+        <Route 
+          path="projects" 
+          element={
+            <ParentOnlyRoute>
+              <ProjectsPage />
             </ParentOnlyRoute>
           } 
         />

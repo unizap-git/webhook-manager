@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
+import { useProject } from '../contexts/ProjectContext';
 import { formatPercentage, formatDate, PerformanceChip } from '../utils/analyticsUtils';
 
 interface FailureExample {
@@ -92,13 +93,23 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { selectedProjectId, isAllProjects } = useProject();
 
   const fetchData = async (selectedPeriod: string) => {
     try {
       setLoading(true);
       setError(null);
       
-      const result = await apiCall<FailureAnalyticsData>('get', `/analytics/failures?period=${selectedPeriod}`);
+      // Build query params with project filter
+      const queryParams = new URLSearchParams({
+        period: selectedPeriod,
+      });
+      
+      if (selectedProjectId && !isAllProjects) {
+        queryParams.append('projectId', selectedProjectId);
+      }
+      
+      const result = await apiCall<FailureAnalyticsData>('get', `/analytics/failures?${queryParams.toString()}`);
       setData(result);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to fetch failure analytics');
@@ -111,7 +122,7 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
 
   useEffect(() => {
     fetchData(period);
-  }, [period]);
+  }, [period, selectedProjectId]); // Re-fetch when project changes
 
   const handleRefresh = async () => {
     setRefreshing(true);

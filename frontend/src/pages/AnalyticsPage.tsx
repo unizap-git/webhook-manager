@@ -34,6 +34,7 @@ import FailureAnalytics from '../components/FailureAnalytics';
 import LoadingState from '../components/LoadingState';
 import DateRangeFilter from '../components/DateRangeFilter';
 import { formatPercentage, PerformanceChip } from '../utils/analyticsUtils';
+import { useProject } from '../contexts/ProjectContext';
 
 interface AnalyticsSummary {
   totalMessages: number;
@@ -80,13 +81,23 @@ const AnalyticsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState('7d');
   const [tabValue, setTabValue] = useState(0);
+  const { selectedProjectId, isAllProjects } = useProject();
 
   const fetchAnalytics = async (selectedPeriod: string) => {
     try {
       setLoading(true);
       setError(null);
       
-      const data = await apiCall<AnalyticsData>('get', `/analytics/dashboard?period=${selectedPeriod}`);
+      // Build query params with project filter
+      const queryParams = new URLSearchParams({
+        period: selectedPeriod,
+      });
+      
+      if (selectedProjectId && !isAllProjects) {
+        queryParams.append('projectId', selectedProjectId);
+      }
+      
+      const data = await apiCall<AnalyticsData>('get', `/analytics/dashboard?${queryParams.toString()}`);
       setAnalyticsData(data);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to fetch analytics data');
@@ -98,7 +109,7 @@ const AnalyticsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAnalytics(period);
-  }, [period]);
+  }, [period, selectedProjectId]); // Re-fetch when project changes
 
   const handlePeriodChange = (newPeriod: string, customRange?: any) => {
     setPeriod(newPeriod);

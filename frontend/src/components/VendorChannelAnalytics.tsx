@@ -44,6 +44,7 @@ import {
   formatDate,
   PerformanceChip 
 } from '../utils/analyticsUtils';
+import { useProject } from '../contexts/ProjectContext';
 
 interface VendorChannelStat {
   vendor: string;
@@ -120,16 +121,26 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('vendor-channel');
   const [refreshing, setRefreshing] = useState(false);
+  const { selectedProjectId, isAllProjects } = useProject();
 
   const fetchData = async (selectedPeriod: string) => {
     try {
       setLoading(true);
       setError(null);
       
+      // Build query params with project filter
+      const queryParams = new URLSearchParams({
+        period: selectedPeriod,
+      });
+      
+      if (selectedProjectId && !isAllProjects) {
+        queryParams.append('projectId', selectedProjectId);
+      }
+      
       // Fetch both vendor-channel and channel data
       const [vendorChannelResult, channelResult] = await Promise.all([
-        apiCall('get', `/analytics/vendor-channel?period=${selectedPeriod}`),
-        apiCall('get', `/analytics/channels?period=${selectedPeriod}`)
+        apiCall('get', `/analytics/vendor-channel?${queryParams.toString()}`),
+        apiCall('get', `/analytics/channels?${queryParams.toString()}`)
       ]);
       
       const combinedData: CombinedAnalyticsData = {
@@ -156,7 +167,7 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
 
   useEffect(() => {
     fetchData(period);
-  }, [period]);
+  }, [period, selectedProjectId]); // Re-fetch when project changes
 
   const handleRefresh = async () => {
     setRefreshing(true);

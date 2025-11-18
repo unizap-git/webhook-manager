@@ -129,6 +129,14 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = req.body;
 
+    logger.info(`Login attempt for email: ${email}`);
+
+    // Validate request body
+    if (!email || !password) {
+      logger.warn(`Login validation failed - missing email or password`);
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
     // Find user
     const user = await prisma.user.findUnique({
       where: { email },
@@ -140,14 +148,20 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     });
 
     if (!user) {
+      logger.warn(`Login failed - user not found for email: ${email}`);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    logger.info(`User found for email: ${email}, checking password`);
 
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
+      logger.warn(`Login failed - invalid password for email: ${email}`);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    logger.info(`Login successful for email: ${email}`);
 
     // Generate JWT token
     const token = jwt.sign(
