@@ -70,7 +70,7 @@ const VendorsPage: React.FC = () => {
       const [configsData, vendorsData, channelsData, projectsData] = await Promise.all([
         apiCall<{ configs: UserVendorChannel[] }>('get', '/vendors/user-configs'),
         apiCall<{ vendors: Vendor[] }>('get', '/vendors'),
-        apiCall<{ channels: Channel[] }>('get', '/channels'),
+        apiCall<{ channels: Channel[] }>('get', '/vendors/channels'),
         apiCall<{ projects: any[] }>('get', '/projects'),
       ]);
 

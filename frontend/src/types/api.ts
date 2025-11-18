@@ -51,12 +51,32 @@ export interface Vendor {
   id: string;
   name: string;
   slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface Channel {
   id: string;
-  type: string;
   name: string;
+  type: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    userVendorChannels: number;
+    messages: number;
+    projectAccess: number;
+  };
 }
 
 export interface UserVendorChannel {

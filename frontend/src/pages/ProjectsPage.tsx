@@ -31,18 +31,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../api/client';
 import LoadingState from '../components/LoadingState';
 import { useProject } from '../contexts/ProjectContext';
-
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  _count?: {
-    vendors: number;
-    channels: number;
-    messages: number;
-  };
-}
+import { Project } from '../types/api';
 
 interface CreateProjectData {
   name: string;
@@ -241,19 +230,13 @@ const ProjectsPage: React.FC = () => {
                       <Chip
                         size="small"
                         icon={<WebhookIcon />}
-                        label={`${project._count.vendors} Vendors`}
-                        variant="outlined"
-                      />
-                      <Chip
-                        size="small"
-                        icon={<WebhookIcon />}
-                        label={`${project._count.channels} Channels`}
+                        label={`${project._count?.userVendorChannels || 0} Configurations`}
                         variant="outlined"
                       />
                       <Chip
                         size="small"
                         icon={<AnalyticsIcon />}
-                        label={`${project._count.messages} Messages`}
+                        label={`${project._count?.messages || 0} Messages`}
                         variant="outlined"
                       />
                     </Box>

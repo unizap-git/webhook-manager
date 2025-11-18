@@ -161,7 +161,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               )}
               {project._count && (
                 <Typography variant="caption" color="text.secondary" display="block">
-                  {project._count.vendors} vendors • {project._count.channels} channels • {project._count.messages} messages
+                  {project._count.userVendorChannels || 0} configurations • {project._count.messages || 0} messages
                 </Typography>
               )}
             </Box>
