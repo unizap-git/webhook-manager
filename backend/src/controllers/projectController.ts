@@ -19,7 +19,7 @@ const updateProjectSchema = z.object({
 export const createProject = async (req: Request, res: Response) => {
   try {
     const { name, description } = createProjectSchema.parse(req.body);
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -61,7 +61,7 @@ export const createProject = async (req: Request, res: Response) => {
 // Get all projects for the authenticated user
 export const getProjects = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     const userType = req.user?.accountType;
 
     if (!userId) {
@@ -124,7 +124,7 @@ export const getProjects = async (req: Request, res: Response) => {
 export const getProject = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     const userType = req.user?.accountType;
 
     if (!userId) {
@@ -182,7 +182,7 @@ export const updateProject = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updateData = updateProjectSchema.parse(req.body);
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -237,7 +237,7 @@ export const updateProject = async (req: Request, res: Response) => {
 export const deleteProject = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -271,7 +271,7 @@ export const deleteProject = async (req: Request, res: Response) => {
 export const grantProjectAccess = async (req: Request, res: Response) => {
   try {
     const { projectId, childUserId, accessType } = req.body;
-    const parentUserId = req.user?.id;
+    const parentUserId = req.user?.userId;
 
     if (!parentUserId) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -346,7 +346,7 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
 export const revokeProjectAccess = async (req: Request, res: Response) => {
   try {
     const { projectId, childUserId } = req.params;
-    const parentUserId = req.user?.id;
+    const parentUserId = req.user?.userId;
 
     if (!parentUserId) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -383,7 +383,7 @@ export const revokeProjectAccess = async (req: Request, res: Response) => {
 export const getProjectAccessList = async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });

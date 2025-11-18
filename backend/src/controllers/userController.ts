@@ -100,6 +100,17 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       }
     });
 
+    // Create default project for new user
+    await prisma.project.create({
+      data: {
+        name: 'Default Project',
+        description: 'Your first project to get started',
+        userId: user.id,
+      }
+    });
+
+    logger.info(`New user registered: ${email} with default project`);
+
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id, email: user.email, accountType: user.accountType },

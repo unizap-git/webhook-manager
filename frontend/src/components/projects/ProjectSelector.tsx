@@ -39,6 +39,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated, token } = useAuthStore();
 
   const fetchProjects = async () => {
     try {
@@ -59,13 +60,29 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   };
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    // Only fetch projects if user is authenticated and has a token
+    if (isAuthenticated && token) {
+      fetchProjects();
+    } else {
+      setLoading(false);
+    }
+  }, [isAuthenticated, token]);
 
   const handleProjectChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value;
     onProjectChange(value === 'all' ? null : value);
   };
+
+  if (!isAuthenticated || !token) {
+    return (
+      <Box display="flex" alignItems="center" minWidth={200}>
+        <ProjectIcon sx={{ mr: 1, color: 'action.active' }} fontSize="small" />
+        <Typography variant="body2" color="text.secondary">
+          Please log in
+        </Typography>
+      </Box>
+    );
+  }
 
   if (loading) {
     return (
