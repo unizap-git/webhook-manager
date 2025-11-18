@@ -44,7 +44,9 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   
   // CORS configuration
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  CORS_ORIGIN: z.string().default('http://localhost:5173').transform((val: string) => 
+    val.split(',').map(url => url.trim())
+  ),
   
   // Queue configuration
   QUEUE_CONCURRENCY: z.string().default('5').transform((val: string) => parseInt(val, 10)),
@@ -104,7 +106,7 @@ export interface EnvConfig {
   LOG_LEVEL: 'error' | 'warn' | 'info' | 'debug';
   
   // CORS
-  CORS_ORIGIN: string;
+  CORS_ORIGIN: string[];
   
   // Queue
   QUEUE_CONCURRENCY: number;
