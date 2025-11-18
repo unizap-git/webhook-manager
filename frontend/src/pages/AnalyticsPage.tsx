@@ -416,8 +416,8 @@ const AnalyticsPage: React.FC = () => {
       {/* Tab Content */}
       <LoadingState loading={loading} error={error}>
         {tabValue === 0 && renderOverviewTab()}
-        {tabValue === 1 && <VendorChannelAnalytics />}
-        {tabValue === 2 && <FailureAnalytics />}
+        {tabValue === 1 && <VendorChannelAnalytics period={period} />}
+        {tabValue === 2 && <FailureAnalytics period={period} />}
       </LoadingState>
     </Box>
   );

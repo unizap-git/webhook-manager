@@ -29,7 +29,6 @@ import {
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
-import DateRangeFilter from './DateRangeFilter';
 import { formatPercentage, formatDate, PerformanceChip } from '../utils/analyticsUtils';
 
 interface FailureExample {
@@ -84,11 +83,14 @@ interface FailureAnalyticsData {
   };
 }
 
-const FailureAnalytics: React.FC = () => {
+interface FailureAnalyticsProps {
+  period?: string;
+}
+
+const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) => {
   const [data, setData] = useState<FailureAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState('7d');
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async (selectedPeriod: string) => {
@@ -111,10 +113,6 @@ const FailureAnalytics: React.FC = () => {
     fetchData(period);
   }, [period]);
 
-  const handlePeriodChange = (newPeriod: string, customRange?: any) => {
-    setPeriod(newPeriod);
-  };
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchData(period);
@@ -134,7 +132,7 @@ const FailureAnalytics: React.FC = () => {
     const headers = Object.keys(csvData[0] || {});
     const csvContent = [
       headers.join(','),
-      ...csvData.map(row => headers.map(header => row[header]).join(','))
+      ...csvData.map(row => headers.map(header => String((row as any)[header])).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -154,11 +152,6 @@ const FailureAnalytics: React.FC = () => {
         </Typography>
         
         <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
-          <DateRangeFilter 
-            value={period} 
-            onChange={handlePeriodChange}
-            size="small"
-          />
           <Button
             variant="outlined"
             startIcon={<Refresh />}
@@ -267,8 +260,7 @@ const FailureAnalytics: React.FC = () => {
                           <TableCell align="right">{reason.count}</TableCell>
                           <TableCell align="right">
                             <PerformanceChip 
-                              value={reason.percentage} 
-                              inverse
+                              value={reason.percentage}
                             />
                           </TableCell>
                           <TableCell align="right">

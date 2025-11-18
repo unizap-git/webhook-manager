@@ -37,7 +37,6 @@ import {
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
-import DateRangeFilter from './DateRangeFilter';
 import { 
   getPerformanceColor, 
   getPerformanceIcon, 
@@ -111,11 +110,14 @@ interface CombinedAnalyticsData {
 
 type ViewMode = 'vendor-channel' | 'channel-focused';
 
-const VendorChannelAnalytics: React.FC = () => {
+interface VendorChannelAnalyticsProps {
+  period?: string;
+}
+
+const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period = '7d' }) => {
   const [data, setData] = useState<CombinedAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState('7d');
   const [viewMode, setViewMode] = useState<ViewMode>('vendor-channel');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -155,10 +157,6 @@ const VendorChannelAnalytics: React.FC = () => {
   useEffect(() => {
     fetchData(period);
   }, [period]);
-
-  const handlePeriodChange = (newPeriod: string, customRange?: any) => {
-    setPeriod(newPeriod);
-  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -590,11 +588,6 @@ const VendorChannelAnalytics: React.FC = () => {
         </Typography>
         
         <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
-          <DateRangeFilter 
-            value={period} 
-            onChange={handlePeriodChange}
-            size="small"
-          />
           <Button
             variant="outlined"
             startIcon={<Refresh />}

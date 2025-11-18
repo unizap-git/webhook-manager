@@ -12,28 +12,53 @@ interface AuthRequest extends Request {
   effectiveUserId?: string;
 }
 
+// Helper function to calculate date range based on period
+const calculateDateRange = (period: string) => {
+  const endDate = new Date();
+  endDate.setHours(23, 59, 59, 999); // End of today
+  const startDate = new Date();
+  
+  switch (period) {
+    case 'today':
+      startDate.setHours(0, 0, 0, 0); // Start of today
+      break;
+    case 'yesterday':
+      startDate.setDate(endDate.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0); // Start of yesterday
+      endDate.setDate(endDate.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999); // End of yesterday
+      break;
+    case '1d':
+      startDate.setDate(endDate.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case '7d':
+      startDate.setDate(endDate.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case '30d':
+      startDate.setDate(endDate.getDate() - 30);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case '90d':
+      startDate.setDate(endDate.getDate() - 90);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    default:
+      startDate.setDate(endDate.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+  }
+  
+  return { startDate, endDate };
+};
+
 export const getDashboardStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.effectiveUserId;
     const { period = '7d', vendorId, channelId } = req.query;
 
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    
-    switch (period) {
-      case '1d':
-        startDate.setDate(endDate.getDate() - 1);
-        break;
-      case '7d':
-        startDate.setDate(endDate.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(endDate.getDate() - 30);
-        break;
-      default:
-        startDate.setDate(endDate.getDate() - 7);
-    }
+    // Calculate date range using helper function
+    const { startDate, endDate } = calculateDateRange(period as string);
 
     // Build where clause
     const whereClause: any = {
@@ -515,24 +540,16 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
 
     const { period = '7d', startDate, endDate } = req.query;
 
-    // Calculate date range
-    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
-    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    // Calculate date range using helper function or custom dates
+    let startDate_calc: Date, endDate_calc: Date;
     
-    if (!startDate) {
-      switch (period) {
-        case '1d':
-          startDate_calc.setDate(endDate_calc.getDate() - 1);
-          break;
-        case '7d':
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-          break;
-        case '30d':
-          startDate_calc.setDate(endDate_calc.getDate() - 30);
-          break;
-        default:
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-      }
+    if (startDate && endDate) {
+      startDate_calc = new Date(startDate as string);
+      endDate_calc = new Date(endDate as string);
+    } else {
+      const dateRange = calculateDateRange(period as string);
+      startDate_calc = dateRange.startDate;
+      endDate_calc = dateRange.endDate;
     }
 
     // Get all message events with their raw payloads
@@ -668,24 +685,16 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
 
     const { period = '7d', startDate, endDate } = req.query;
 
-    // Calculate date range
-    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
-    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    // Calculate date range using helper function or custom dates
+    let startDate_calc: Date, endDate_calc: Date;
     
-    if (!startDate) {
-      switch (period) {
-        case '1d':
-          startDate_calc.setDate(endDate_calc.getDate() - 1);
-          break;
-        case '7d':
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-          break;
-        case '30d':
-          startDate_calc.setDate(endDate_calc.getDate() - 30);
-          break;
-        default:
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-      }
+    if (startDate && endDate) {
+      startDate_calc = new Date(startDate as string);
+      endDate_calc = new Date(endDate as string);
+    } else {
+      const dateRange = calculateDateRange(period as string);
+      startDate_calc = dateRange.startDate;
+      endDate_calc = dateRange.endDate;
     }
 
     // Get all message events grouped by channel
@@ -858,24 +867,16 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
 
     const { period = '7d', startDate, endDate, vendorId, channelId } = req.query;
 
-    // Calculate date range
-    const endDate_calc = endDate ? new Date(endDate as string) : new Date();
-    const startDate_calc = startDate ? new Date(startDate as string) : new Date();
+    // Calculate date range using helper function or custom dates
+    let startDate_calc: Date, endDate_calc: Date;
     
-    if (!startDate) {
-      switch (period) {
-        case '1d':
-          startDate_calc.setDate(endDate_calc.getDate() - 1);
-          break;
-        case '7d':
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-          break;
-        case '30d':
-          startDate_calc.setDate(endDate_calc.getDate() - 30);
-          break;
-        default:
-          startDate_calc.setDate(endDate_calc.getDate() - 7);
-      }
+    if (startDate && endDate) {
+      startDate_calc = new Date(startDate as string);
+      endDate_calc = new Date(endDate as string);
+    } else {
+      const dateRange = calculateDateRange(period as string);
+      startDate_calc = dateRange.startDate;
+      endDate_calc = dateRange.endDate;
     }
 
     // Build where clause
