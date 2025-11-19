@@ -276,11 +276,22 @@ export const deleteProject = async (req: Request, res: Response) => {
 // Grant project access to child account
 export const grantProjectAccess = async (req: Request, res: Response) => {
   try {
-    const { projectId, childUserId, accessType } = req.body;
+    // Support both URL param and body param for projectId
+    const projectIdFromParams = req.params.projectId;
+    const { projectId: projectIdFromBody, childUserId, accessType = 'specific' } = req.body;
+    const projectId = projectIdFromParams || projectIdFromBody;
     const parentUserId = req.user?.userId;
 
     if (!parentUserId) {
       return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    if (!childUserId) {
+      return res.status(400).json({ error: 'Child User ID is required' });
     }
 
     // Validate access type

@@ -22,6 +22,13 @@ import {
   Alert,
   Chip,
   Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+  ListItemText,
+  Checkbox,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -29,6 +36,7 @@ import {
   Delete as DeleteIcon,
   Key as KeyIcon,
   ContentCopy as CopyIcon,
+  Business as ProjectIcon,
 } from '@mui/icons-material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -39,22 +47,30 @@ import { apiCall } from '../api/client';
 import { 
   ChildAccount, 
   CreateChildAccountResponse, 
-  GetChildAccountsResponse 
+  GetChildAccountsResponse,
+  Project
 } from '../types/api';
+
+interface CreateChildFormData {
+  email: string;
+  name?: string;
+  projectIds: string[];
+}
 
 const createChildSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+  projectIds: z.array(z.string()).min(1, 'Please select at least one project'),
 });
-
-type CreateChildFormData = z.infer<typeof createChildSchema>;
 
 const ChildAccountsPage: React.FC = () => {
   const [childAccounts, setChildAccounts] = useState<ChildAccount[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newChildPassword, setNewChildPassword] = useState<string>('');
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   
   const { enqueueSnackbar } = useSnackbar();
 
@@ -63,9 +79,45 @@ const ChildAccountsPage: React.FC = () => {
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    watch,
   } = useForm<CreateChildFormData>({
     resolver: zodResolver(createChildSchema),
+    defaultValues: {
+      projectIds: [],
+    },
   });
+
+  const watchedProjectIds = watch('projectIds');
+
+  useEffect(() => {
+    fetchChildAccounts();
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
+    setValue('projectIds', selectedProjects);
+  }, [selectedProjects, setValue]);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await apiCall<{ projects: Project[] }>('get', '/projects');
+      setProjects(response.projects || []);
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.error || 'Failed to fetch projects', { 
+        variant: 'error' 
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchChildAccounts();
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
+    setValue('projectIds', selectedProjects);
+  }, [selectedProjects, setValue]);
 
   const fetchChildAccounts = async () => {
     try {
@@ -84,17 +136,32 @@ const ChildAccountsPage: React.FC = () => {
   const handleCreateChild = async (data: CreateChildFormData) => {
     try {
       setIsLoading(true);
-      const response = await apiCall<CreateChildAccountResponse>('post', '/user/child-accounts', data);
+      
+      // Create the child account
+      const response = await apiCall<CreateChildAccountResponse>('post', '/user/child-accounts', {
+        email: data.email,
+        name: data.name,
+      });
+      
+      // Grant access to selected projects
+      if (data.projectIds && data.projectIds.length > 0) {
+        for (const projectId of data.projectIds) {
+          await apiCall('post', `/projects/${projectId}/access`, {
+            childUserId: response.childAccount.id,
+          });
+        }
+      }
       
       setNewChildPassword(response.childAccount.password || '');
       setShowPasswordDialog(true);
       setIsCreateDialogOpen(false);
+      setSelectedProjects([]);
       reset();
       
       // Refresh the list
       await fetchChildAccounts();
       
-      enqueueSnackbar('Child account created successfully', { variant: 'success' });
+      enqueueSnackbar(`Child account created with access to ${data.projectIds.length} project(s)`, { variant: 'success' });
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.error || 'Failed to create child account', { 
         variant: 'error' 
@@ -143,6 +210,23 @@ const ChildAccountsPage: React.FC = () => {
       enqueueSnackbar('Password copied to clipboard', { variant: 'success' });
     } catch (error) {
       enqueueSnackbar('Failed to copy password', { variant: 'error' });
+    }
+  };
+
+  const handleProjectToggle = (projectId: string) => {
+    setSelectedProjects(prev => {
+      const newSelected = prev.includes(projectId)
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId];
+      return newSelected;
+    });
+  };
+
+  const handleSelectAllProjects = () => {
+    if (selectedProjects.length === projects.length) {
+      setSelectedProjects([]);
+    } else {
+      setSelectedProjects(projects.map(p => p.id));
     }
   };
 
@@ -267,6 +351,7 @@ const ChildAccountsPage: React.FC = () => {
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
             Create a new child account that will have analytics-only access.
+            Select which projects the child account can access.
             A secure password will be generated automatically.
           </DialogContentText>
           <Box component="form" onSubmit={handleSubmit(handleCreateChild)}>
@@ -291,17 +376,97 @@ const ChildAccountsPage: React.FC = () => {
               variant="outlined"
               error={!!errors.name}
               helperText={errors.name?.message}
+              sx={{ mb: 2 }}
             />
+            
+            {/* Project Selection */}
+            <FormControl 
+              fullWidth 
+              margin="dense"
+              error={!!errors.projectIds}
+            >
+              <InputLabel id="project-select-label">
+                <Box display="flex" alignItems="center">
+                  <ProjectIcon sx={{ mr: 0.5 }} fontSize="small" />
+                  Select Projects *
+                </Box>
+              </InputLabel>
+              <Select
+                labelId="project-select-label"
+                multiple
+                value={selectedProjects}
+                onChange={(e) => setSelectedProjects(e.target.value as string[])}
+                label={
+                  <Box display="flex" alignItems="center">
+                    <ProjectIcon sx={{ mr: 0.5 }} fontSize="small" />
+                    Select Projects *
+                  </Box>
+                }
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {(selected as string[]).map((value) => {
+                      const project = projects.find(p => p.id === value);
+                      return (
+                        <Chip key={value} label={project?.name || value} size="small" />
+                      );
+                    })}
+                  </Box>
+                )}
+              >
+                <MenuItem>
+                  <Checkbox
+                    checked={selectedProjects.length === projects.length && projects.length > 0}
+                    indeterminate={selectedProjects.length > 0 && selectedProjects.length < projects.length}
+                    onChange={handleSelectAllProjects}
+                  />
+                  <ListItemText primary="Select All" />
+                </MenuItem>
+                {projects.map((project) => (
+                  <MenuItem key={project.id} value={project.id}>
+                    <Checkbox checked={selectedProjects.includes(project.id)} />
+                    <ListItemText 
+                      primary={project.name}
+                      secondary={project.description}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.projectIds && (
+                <FormHelperText>{errors.projectIds.message}</FormHelperText>
+              )}
+              {selectedProjects.length === 0 && !errors.projectIds && (
+                <FormHelperText>
+                  Child account will have access to selected projects only
+                </FormHelperText>
+              )}
+              {selectedProjects.length > 0 && (
+                <FormHelperText>
+                  {selectedProjects.length} project(s) selected
+                </FormHelperText>
+              )}
+            </FormControl>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIsCreateDialogOpen(false)}>
+          <Button onClick={() => {
+            setIsCreateDialogOpen(false);
+            setSelectedProjects([]);
+            reset();
+          }}>
             Cancel
           </Button>
           <Button 
-            onClick={handleSubmit(handleCreateChild)}
+            onClick={() => {
+              // Validate that projects are selected
+              if (selectedProjects.length === 0) {
+                setValue('projectIds', []);
+                return;
+              }
+              setValue('projectIds', selectedProjects);
+              handleSubmit(handleCreateChild)();
+            }}
             variant="contained"
-            disabled={isLoading}
+            disabled={isLoading || selectedProjects.length === 0}
           >
             {isLoading ? 'Creating...' : 'Create Account'}
           </Button>
