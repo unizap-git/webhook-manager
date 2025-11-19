@@ -91,6 +91,65 @@ export async function processWebhookPayload(
       throw new Error(`No parser available for vendor: ${vendorSlug}`);
     }
 
+    // Special handling for SendGrid which sends arrays of events
+    if (vendorSlug.toLowerCase() === 'sendgrid' && Array.isArray(webhookData)) {
+      // Process each event in the SendGrid array
+      let processedEvents = 0;
+      for (const event of webhookData) {
+        const parsedData = parser(event, channelType);
+        
+        // Create or update message for each event
+        let whereClause: any = {
+          userId,
+          vendorId: vendor.id,
+          channelId: channel.id,
+          messageId: parsedData.messageId,
+        };
+
+        if (projectId) {
+          whereClause.projectId = projectId;
+        }
+
+        let message = await prisma.message.findFirst({
+          where: whereClause,
+        });
+
+        if (!message) {
+          message = await prisma.message.create({
+            data: {
+              userId,
+              vendorId: vendor.id,
+              channelId: channel.id,
+              projectId: projectId || config.projectId,
+              recipient: parsedData.recipient || 'unknown',
+              messageId: parsedData.messageId || `${Date.now()}`,
+              contentSummary: parsedData.contentSummary || 'No content summary',
+            },
+          });
+        }
+
+        // Create message event for each SendGrid event
+        await prisma.messageEvent.create({
+          data: {
+            messageId: message.id,
+            status: parsedData.status,
+            reason: parsedData.reason,
+            timestamp: parsedData.timestamp || new Date(),
+            rawPayload: JSON.stringify(event),
+          },
+        });
+
+        processedEvents++;
+      }
+      
+      logger.info(`📨 ${vendor.name}: processed ${processedEvents} events for message ${webhookData[0]?.sg_message_id}`);
+      
+      // Update analytics cache once for all events
+      await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId);
+      return;
+    }
+
+    // For other vendors (single event processing)
     const parsedData = parser(webhookData, channelType);
 
     // Create or update message
@@ -235,17 +294,30 @@ function parseAisensyWebhook(data: WebhookPayload, channelType: string) {
 
 function parseSendGridWebhook(data: WebhookPayload, channelType: string) {
   // SendGrid webhook format parsing
-  const messageId = data.sg_message_id || data.message_id || data.smtp_id;
-  const status = mapSendGridStatus(data.event);
-  const recipient = data.email || data.to;
+  // Note: This function now receives individual events, not arrays
+  const event = data; // Single event object
+  
+  // Try multiple possible message ID fields from SendGrid
+  const messageId = event.sg_message_id || 
+                   event['sg_message_id'] || 
+                   event.message_id || 
+                   event.smtp_id || 
+                   event['smtp-id'] ||
+                   event.sg_event_id ||
+                   event['sg_event_id'] ||
+                   event.unique_id ||
+                   'unknown';
+  
+  const status = mapSendGridStatus(event.event);
+  const recipient = event.email || event.to;
   
   return {
     messageId,
     status,
     recipient,
-    reason: data.reason || data.response,
-    timestamp: data.timestamp ? new Date(data.timestamp * 1000) : new Date(),
-    contentSummary: data.subject ? data.subject.substring(0, 100) : undefined,
+    reason: event.reason || event.response,
+    timestamp: event.timestamp ? new Date(event.timestamp * 1000) : new Date(),
+    contentSummary: event.subject ? event.subject.substring(0, 100) : undefined,
   };
 }
 
@@ -338,7 +410,10 @@ function mapSendGridStatus(event: string): string {
     'deferred': 'sent',
     'blocked': 'failed',
     'spam_report': 'failed',
+    'spamreport': 'failed', // Alternative format
     'unsubscribe': 'delivered',
+    'group_unsubscribe': 'delivered',
+    'group_resubscribe': 'delivered',
   };
   
   return statusMap[event?.toLowerCase()] || 'sent';

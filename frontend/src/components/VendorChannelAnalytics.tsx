@@ -379,7 +379,7 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
         {/* Channel Performance Cards */}
         <Grid container spacing={3} mb={3}>
           {data.channelStats.map((channel, index) => (
-            <Grid item xs={12} md={6} key={index}>
+            <Grid item xs={12} md={4} key={index}>
               <Card>
                 <CardContent>
                   <Box display="flex" alignItems="center" mb={2}>
