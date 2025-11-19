@@ -111,11 +111,6 @@ const ChildAccountsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchChildAccounts();
-    fetchProjects();
-  }, []);
-
-  useEffect(() => {
     setValue('projectIds', selectedProjects);
   }, [selectedProjects, setValue]);
 
@@ -239,10 +234,6 @@ const ChildAccountsPage: React.FC = () => {
       minute: '2-digit',
     });
   };
-
-  useEffect(() => {
-    fetchChildAccounts();
-  }, []);
 
   return (
     <Box>
