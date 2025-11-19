@@ -89,6 +89,25 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
       }
     }
 
+    // Verify webhook signature for vendors that support it
+    if (vendorSlug.toLowerCase() === 'aisensy' && userVendorChannel.webhookSecret) {
+      const signature = req.headers['x-aisensy-signature'] as string;
+      if (signature) {
+        const { verifyWebhookSignature } = await import('../services/webhookService');
+        const rawBody = JSON.stringify(webhookData);
+        
+        if (!verifyWebhookSignature(vendorSlug, rawBody, signature, userVendorChannel.webhookSecret)) {
+          return res.status(401).json({
+            error: 'Invalid webhook signature',
+          });
+        }
+        
+        logger.info(`✅ ${vendor.name}: Webhook signature verified`);
+      } else if (userVendorChannel.webhookSecret) {
+        logger.warn(`⚠️ ${vendor.name}: No signature provided but secret is configured`);
+      }
+    }
+
     const userId = userVendorChannel.userId;
 
     // Try to add to processing queue, fallback to direct processing if Redis unavailable

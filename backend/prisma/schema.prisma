@@ -66,14 +66,15 @@ model Channel {
 }
 
 model UserVendorChannel {
-  id         String @id @default(cuid())
-  userId     String @map("user_id")
-  vendorId   String @map("vendor_id")
-  channelId  String @map("channel_id")
-  projectId  String @map("project_id")
-  webhookUrl String @unique @map("webhook_url")
-  isActive   Boolean @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id            String  @id @default(cuid())
+  userId        String  @map("user_id")
+  vendorId      String  @map("vendor_id")
+  channelId     String  @map("channel_id")
+  projectId     String  @map("project_id")
+  webhookUrl    String  @unique @map("webhook_url")
+  webhookSecret String? @map("webhook_secret")
+  isActive      Boolean @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   // Relations
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)

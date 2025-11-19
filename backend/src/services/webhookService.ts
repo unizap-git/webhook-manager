@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { createHmac } from 'crypto';
 
 interface WebhookPayload {
   [key: string]: any;
@@ -152,6 +153,29 @@ export async function processWebhookPayload(
     // For other vendors (single event processing)
     const parsedData = parser(webhookData, channelType);
 
+    // Special handling for AiSensy project mapping
+    let resolvedProjectId = projectId || config.projectId;
+    if (vendorSlug.toLowerCase() === 'aisensy' && parsedData.projectId) {
+      // Try to map AiSensy project_id to our project system
+      const aisensyProject = await prisma.project.findFirst({
+        where: {
+          userId,
+          // Try to match by external project ID or name
+          OR: [
+            { name: parsedData.projectId },
+            { description: { contains: parsedData.projectId } }
+          ]
+        }
+      });
+
+      if (aisensyProject) {
+        resolvedProjectId = aisensyProject.id;
+        logger.info(`🔗 AiSensy: mapped project_id "${parsedData.projectId}" to project "${aisensyProject.name}"`);
+      } else {
+        logger.warn(`⚠️ AiSensy: unknown project_id "${parsedData.projectId}", using default project`);
+      }
+    }
+
     // Create or update message
     let whereClause: any = {
       userId,
@@ -160,8 +184,8 @@ export async function processWebhookPayload(
       messageId: parsedData.messageId,
     };
 
-    if (projectId) {
-      whereClause.projectId = projectId;
+    if (resolvedProjectId) {
+      whereClause.projectId = resolvedProjectId;
     }
 
     let message = await prisma.message.findFirst({
@@ -174,7 +198,7 @@ export async function processWebhookPayload(
           userId,
           vendorId: vendor.id,
           channelId: channel.id,
-          projectId: projectId || config.projectId, // Use provided projectId or fallback to config
+          projectId: resolvedProjectId, // Use resolved project ID
           recipient: parsedData.recipient || 'unknown',
           messageId: parsedData.messageId || `${Date.now()}`,
           contentSummary: parsedData.contentSummary || 'No content summary',
@@ -196,7 +220,7 @@ export async function processWebhookPayload(
     logger.info(`📨 ${vendor.name}: ${parsedData.status} | ${parsedData.messageId}`);
 
     // Update analytics cache (could be done in a separate job)
-    await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId);
+    await updateAnalyticsCache(userId, vendor.id, channel.id, resolvedProjectId);
 
   } catch (error) {
     logger.error('Webhook processing error:', error);
@@ -278,17 +302,54 @@ function parseKarixWebhook(data: WebhookPayload, channelType: string) {
 
 function parseAisensyWebhook(data: WebhookPayload, channelType: string) {
   // AiSensy webhook format parsing
-  const messageId = data.messageId || data.id || data.msg_id;
-  const status = mapAisensyStatus(data.status || data.message_status);
-  const recipient = data.to || data.recipient || data.phone;
+  // Handle both message.created and message.status.updated events
+  const messageData = data.message || data;
+  
+  // Use messageId as primary identifier (as per requirements)
+  const messageId = messageData.messageId || messageData.id;
+  
+  // Map AiSensy status to our standard statuses
+  const status = mapAisensyStatus(messageData.status);
+  
+  // Use phone_number as recipient
+  const recipient = messageData.phone_number;
+  
+  // Get appropriate timestamp based on current status
+  let timestamp = new Date();
+  if (messageData.sent_at && status === 'sent') {
+    timestamp = new Date(messageData.sent_at);
+  } else if (messageData.delivered_at && status === 'delivered') {
+    timestamp = new Date(messageData.delivered_at);
+  } else if (messageData.read_at && status === 'read') {
+    timestamp = new Date(messageData.read_at);
+  } else if (messageData.failed_at && status === 'failed') {
+    timestamp = new Date(messageData.failed_at);
+  }
+  
+  // Extract failure reason if present
+  const failureReason = messageData.failureResponse?.reason || 
+                        messageData.failureResponse?.code;
+  
+  // Create content summary from message type and content
+  let contentSummary = `${messageData.message_type || 'MESSAGE'}`;
+  if (messageData.message_content) {
+    const contentStr = typeof messageData.message_content === 'object' 
+      ? JSON.stringify(messageData.message_content) 
+      : messageData.message_content;
+    contentSummary += `: ${contentStr.substring(0, 100)}`;
+  }
   
   return {
     messageId,
     status,
     recipient,
-    reason: data.error || data.reason,
-    timestamp: data.timestamp ? new Date(data.timestamp * 1000) : new Date(),
-    contentSummary: data.message ? data.message.substring(0, 100) : undefined,
+    reason: failureReason,
+    timestamp,
+    contentSummary: contentSummary.substring(0, 100),
+    // Store additional AiSensy-specific data
+    projectId: messageData.project_id, // For auto-mapping
+    contactId: messageData.contact_id,
+    messageType: messageData.message_type,
   };
 }
 
@@ -389,14 +450,34 @@ function mapKarixStatus(status: string): string {
 
 function mapAisensyStatus(status: string): string {
   const statusMap: { [key: string]: string } = {
+    // Standard statuses
     'sent': 'sent',
     'delivered': 'delivered',
     'read': 'read',
     'failed': 'failed',
+    
+    // Common variations
+    'pending': 'sent',
+    'queued': 'sent',
+    'sending': 'sent',
+    'accepted': 'sent',
+    
+    // Error states
     'error': 'failed',
+    'rejected': 'failed',
+    'bounced': 'failed',
+    'blocked': 'failed',
+    'invalid': 'failed',
+    
+    // WhatsApp specific statuses
+    'enroute': 'sent',
+    'received': 'delivered',
+    'seen': 'read',
+    'clicked': 'read',
   };
   
-  return statusMap[status?.toLowerCase()] || 'sent';
+  // If status is not mapped, return it as-is for future analysis
+  return statusMap[status?.toLowerCase()] || status?.toLowerCase() || 'sent';
 }
 
 function mapSendGridStatus(event: string): string {
@@ -520,5 +601,40 @@ async function updateAnalyticsCache(userId: string, vendorId: string, channelId:
   } catch (error) {
     logger.error('Analytics cache update error:', error);
     // Don't throw here as this is not critical for webhook processing
+  }
+}
+
+// Webhook signature verification functions
+export function verifyAisensySignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  try {
+    // Generate HMAC-SHA256 signature
+    const generatedSignature = createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex');
+    
+    // Compare signatures (time-safe comparison)
+    return signature === generatedSignature;
+  } catch (error) {
+    logger.error('AiSensy signature verification failed:', error);
+    return false;
+  }
+}
+
+export function verifyWebhookSignature(
+  vendor: string,
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  switch (vendor.toLowerCase()) {
+    case 'aisensy':
+      return verifyAisensySignature(payload, signature, secret);
+    default:
+      logger.warn(`No signature verification implemented for vendor: ${vendor}`);
+      return true; // Allow through for vendors without signature verification
   }
 }

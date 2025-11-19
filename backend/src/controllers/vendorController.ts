@@ -90,7 +90,7 @@ export const getUserVendorChannels = async (req: AuthRequest, res: Response, nex
 export const addUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.userId;
-    const { vendorId, channelId, projectId } = req.body;
+    const { vendorId, channelId, projectId, webhookSecret } = req.body;
 
     if (!projectId || !vendorId || !channelId) {
       return res.status(400).json({
@@ -164,6 +164,7 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
         channelId: channel.id,
         projectId,
         webhookUrl,
+        webhookSecret: webhookSecret || null, // Include webhook secret if provided
       },
       include: {
         vendor: true,

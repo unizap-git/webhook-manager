@@ -19,6 +19,7 @@ import {
   IconButton,
   Grid,
   Paper,
+  TextField,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,6 +37,7 @@ interface AddConfigFormData {
   vendorId: string;
   channelId: string;
   projectId: string;
+  webhookSecret?: string;
 }
 
 const VendorsPage: React.FC = () => {
@@ -55,8 +57,13 @@ const VendorsPage: React.FC = () => {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<AddConfigFormData>();
+
+  // Watch the selected vendor to conditionally show webhook secret field
+  const selectedVendorId = watch('vendorId');
+  const selectedVendor = vendors.find(v => v.id === selectedVendorId);
 
   useEffect(() => {
     fetchData();
@@ -298,6 +305,24 @@ const VendorsPage: React.FC = () => {
                   </FormControl>
                 )}
               />
+
+              {/* Show webhook secret field for AiSensy */}
+              {selectedVendor?.slug === 'aisensy' && (
+                <Controller
+                  name="webhookSecret"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="Webhook Secret (Optional)"
+                      type="password"
+                      helperText="Required for webhook signature verification. Get this from your AiSensy webhook configuration."
+                      error={!!errors.webhookSecret}
+                    />
+                  )}
+                />
+              )}
             </Box>
           </DialogContent>
           <DialogActions>
