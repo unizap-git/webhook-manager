@@ -255,6 +255,7 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                     <TableCell>Vendor</TableCell>
                     <TableCell>Channel</TableCell>
                     <TableCell align="right">Messages</TableCell>
+                    <TableCell align="right">Sent</TableCell>
                     <TableCell align="right">Delivered</TableCell>
                     <TableCell align="right">Read</TableCell>
                     <TableCell align="right">Failed</TableCell>
@@ -276,12 +277,16 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                           <Chip 
                             label={stat.channel.toUpperCase()} 
                             size="small"
-                            color={stat.channel === 'sms' ? 'primary' : 'secondary'}
+                            color={
+                              stat.channel.toLowerCase() === 'sms' ? 'primary' :
+                              stat.channel.toLowerCase() === 'whatsapp' ? 'success' : 'error'
+                            }
                             sx={{ ml: 1 }}
                           />
                         </Box>
                       </TableCell>
                       <TableCell align="right">{stat.totalMessages}</TableCell>
+                      <TableCell align="right">{stat.sent}</TableCell>
                       <TableCell align="right">{stat.delivered}</TableCell>
                       <TableCell align="right">{stat.read}</TableCell>
                       <TableCell align="right">{stat.failed}</TableCell>

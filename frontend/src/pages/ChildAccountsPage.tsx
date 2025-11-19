@@ -71,6 +71,9 @@ const ChildAccountsPage: React.FC = () => {
   const [newChildPassword, setNewChildPassword] = useState<string>('');
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false);
+  const [resetChildId, setResetChildId] = useState<string>('');
+  const [resetConfirmText, setResetConfirmText] = useState('');
   
   const { enqueueSnackbar } = useSnackbar();
 
@@ -182,15 +185,24 @@ const ChildAccountsPage: React.FC = () => {
     }
   };
 
-  const handleResetPassword = async (childId: string) => {
-    if (!window.confirm('Are you sure you want to reset this child account password?')) {
+  const handleResetPassword = (childId: string) => {
+    setResetChildId(childId);
+    setResetConfirmText('');
+    setShowResetConfirmDialog(true);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (resetConfirmText.toLowerCase() !== 'change password') {
+      enqueueSnackbar('Please type "change password" to confirm', { variant: 'error' });
       return;
     }
 
     try {
-      const response = await apiCall<{ newPassword: string }>('post', `/user/child-accounts/${childId}/reset-password`);
+      const response = await apiCall<{ newPassword: string }>('post', `/user/child-accounts/${resetChildId}/reset-password`);
       setNewChildPassword(response.newPassword);
       setShowPasswordDialog(true);
+      setShowResetConfirmDialog(false);
+      setResetConfirmText('');
       enqueueSnackbar('Password reset successfully', { variant: 'success' });
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.error || 'Failed to reset password', { 
@@ -460,6 +472,53 @@ const ChildAccountsPage: React.FC = () => {
             disabled={isLoading || selectedProjects.length === 0}
           >
             {isLoading ? 'Creating...' : 'Create Account'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reset Password Confirmation Dialog */}
+      <Dialog 
+        open={showResetConfirmDialog} 
+        onClose={() => {
+          setShowResetConfirmDialog(false);
+          setResetConfirmText('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Password Reset</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Are you sure you want to reset this child account password? This action cannot be undone.
+          </DialogContentText>
+          <DialogContentText sx={{ mb: 2, fontWeight: 'bold' }}>
+            Please type "change password" to confirm:
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Type 'change password' to confirm"
+            value={resetConfirmText}
+            onChange={(e) => setResetConfirmText(e.target.value)}
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setShowResetConfirmDialog(false);
+              setResetConfirmText('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleConfirmResetPassword}
+            variant="contained"
+            color="error"
+            disabled={resetConfirmText.toLowerCase() !== 'change password'}
+          >
+            Reset Password
           </Button>
         </DialogActions>
       </Dialog>
