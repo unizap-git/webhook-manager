@@ -199,10 +199,11 @@ export class AnalyticsService {
 
       await this.prisma.analyticsCache.upsert({
         where: {
-          userId_vendorId_channelId_date: {
+          userId_vendorId_channelId_projectId_date: {
             userId,
             vendorId: vendorId || '',
             channelId: channelId || '',
+            projectId: '', // Default empty project
             date
           }
         },
@@ -310,10 +311,11 @@ export class AnalyticsService {
 
       await this.prisma.analyticsCache.upsert({
         where: {
-          userId_vendorId_channelId_date: {
+          userId_vendorId_channelId_projectId_date: {
             userId,
             vendorId: vendorId || '',
             channelId: channelId || '',
+            projectId: '', // Default empty project
             date
           }
         },
@@ -395,7 +397,7 @@ export class AnalyticsService {
 
       const result = await this.prisma.analyticsCache.deleteMany({
         where: {
-          createdAt: {
+          date: {
             lt: cutoffDate
           }
         }

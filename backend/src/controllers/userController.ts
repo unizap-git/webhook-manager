@@ -23,9 +23,14 @@ const generateRandomPassword = (): string => {
   return password;
 };
 
-export const getUserProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUserProfile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -43,9 +48,10 @@ export const getUserProfile = async (req: AuthRequest, res: Response, next: Next
     });
 
     if (!user) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'User not found',
       });
+      return;
     }
 
     // Get user statistics
@@ -63,7 +69,7 @@ export const getUserProfile = async (req: AuthRequest, res: Response, next: Next
     res.json({
       user,
       stats: {
-        totalMessages: stats._count.id,
+        totalMessages: stats._count?.id || 0,
         activeConfigurations: vendorChannelCount,
       },
     });
@@ -74,7 +80,7 @@ export const getUserProfile = async (req: AuthRequest, res: Response, next: Next
 };
 
 // Register new parent account
-export const register = async (req: Request, res: Response, next: NextFunction) => {
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { email, password, name } = req.body;
 
@@ -84,7 +90,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
 
     if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this email' });
+      res.status(400).json({ error: 'User already exists with this email' });
+      return;
     }
 
     // Hash password
@@ -136,7 +143,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // Login
-export const login = async (req: Request, res: Response, next: NextFunction) => {
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { email, password } = req.body;
 
@@ -144,7 +151,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     // Validate request body
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
     }
 
     // Find user
@@ -158,14 +166,16 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
     }
 
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       logger.warn(`Login failed - invalid password for email: ${email}`);
-      return res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
     }
 
     logger.info(`Login successful for email: ${email}`);
@@ -201,14 +211,15 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 };
 
 // Create child account (only for parent accounts)
-export const createChildAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createChildAccount = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { email, name } = req.body;
     const parentId = req.user?.userId;
 
     // Verify that the requester is a parent account
     if (req.user?.accountType !== 'PARENT') {
-      return res.status(403).json({ error: 'Only parent accounts can create child accounts' });
+      res.status(403).json({ error: 'Only parent accounts can create child accounts' });
+      return;
     }
 
     // Check if email already exists
@@ -217,7 +228,8 @@ export const createChildAccount = async (req: AuthRequest, res: Response, next: 
     });
 
     if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this email' });
+      res.status(400).json({ error: 'User already exists with this email' });
+      return;
     }
 
     // Generate random password
@@ -231,7 +243,7 @@ export const createChildAccount = async (req: AuthRequest, res: Response, next: 
         password: hashedPassword,
         name: name || null,
         accountType: 'CHILD',
-        parentId
+        parentId: parentId || null
       }
     });
 
@@ -254,18 +266,21 @@ export const createChildAccount = async (req: AuthRequest, res: Response, next: 
 };
 
 // Get child accounts (only for parent accounts)
-export const getChildAccounts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getChildAccounts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parentId = req.user?.userId;
 
     // Verify that the requester is a parent account
     if (req.user?.accountType !== 'PARENT') {
-      return res.status(403).json({ error: 'Only parent accounts can view child accounts' });
+      res.status(403).json({ error: 'Only parent accounts can view child accounts' });
+      return;
     }
 
     // Get child accounts
     const childAccounts = await prisma.user.findMany({
-      where: { parentId },
+      where: {
+        ...(parentId ? { parentId } : {})
+      },
       select: {
         id: true,
         email: true,
@@ -287,14 +302,25 @@ export const getChildAccounts = async (req: AuthRequest, res: Response, next: Ne
 };
 
 // Reset child account password (only for parent accounts)
-export const resetChildPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const resetChildPassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { childId } = req.params;
     const parentId = req.user?.userId;
 
+    if (!childId) {
+      res.status(400).json({ error: 'Child ID is required' });
+      return;
+    }
+
+    if (!parentId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
     // Verify that the requester is a parent account
     if (req.user?.accountType !== 'PARENT') {
-      return res.status(403).json({ error: 'Only parent accounts can reset child passwords' });
+      res.status(403).json({ error: 'Only parent accounts can reset child passwords' });
+      return;
     }
 
     // Verify that the child account belongs to this parent
@@ -307,7 +333,8 @@ export const resetChildPassword = async (req: AuthRequest, res: Response, next: 
     });
 
     if (!childAccount) {
-      return res.status(404).json({ error: 'Child account not found or not authorized' });
+      res.status(404).json({ error: 'Child account not found or not authorized' });
+      return;
     }
 
     // Generate new random password
@@ -332,14 +359,25 @@ export const resetChildPassword = async (req: AuthRequest, res: Response, next: 
 };
 
 // Delete child account (only for parent accounts)
-export const deleteChildAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const deleteChildAccount = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { childId } = req.params;
     const parentId = req.user?.userId;
 
+    if (!childId) {
+      res.status(400).json({ error: 'Child ID is required' });
+      return;
+    }
+
+    if (!parentId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
     // Verify that the requester is a parent account
     if (req.user?.accountType !== 'PARENT') {
-      return res.status(403).json({ error: 'Only parent accounts can delete child accounts' });
+      res.status(403).json({ error: 'Only parent accounts can delete child accounts' });
+      return;
     }
 
     // Verify that the child account belongs to this parent
@@ -352,7 +390,8 @@ export const deleteChildAccount = async (req: AuthRequest, res: Response, next: 
     });
 
     if (!childAccount) {
-      return res.status(404).json({ error: 'Child account not found or not authorized' });
+      res.status(404).json({ error: 'Child account not found or not authorized' });
+      return;
     }
 
     // Delete child account

@@ -187,7 +187,7 @@ export class CronService {
       // Clean old analytics cache entries
       const deletedAnalytics = await this.prisma.analyticsCache.deleteMany({
         where: {
-          createdAt: {
+          date: {
             lt: cutoffDate
           }
         }

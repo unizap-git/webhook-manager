@@ -24,15 +24,16 @@ export const authenticateToken = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Access token required',
       });
+      return;
     }
 
     const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
@@ -50,33 +51,37 @@ export const authenticateToken = async (
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid token - user not found' });
+      res.status(401).json({ error: 'Invalid token - user not found' });
+      return;
     }
 
     req.user = {
       userId: user.id,
       email: user.email,
       accountType: user.accountType,
-      parentId: user.parentId
+      parentId: user.parentId ?? ''
     };
 
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Invalid token format',
       });
+      return;
     }
     
     if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Token expired',
       });
+      return;
     }
     
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Token verification failed',
     });
+    return;
   }
 };
 
@@ -102,28 +107,30 @@ export const optionalAuth = async (
 };
 
 // Middleware to ensure only parent accounts can access certain routes
-export const requireParentAccount = (req: Request, res: Response, next: NextFunction) => {
+export const requireParentAccount = (req: Request, res: Response, next: NextFunction): void => {
   if (req.user?.accountType !== 'PARENT') {
-    return res.status(403).json({ error: 'This action requires a parent account' });
+    res.status(403).json({ error: 'This action requires a parent account' });
+    return;
   }
   next();
 };
 
 // Middleware to ensure only child accounts can access certain routes
-export const requireChildAccount = (req: Request, res: Response, next: NextFunction) => {
+export const requireChildAccount = (req: Request, res: Response, next: NextFunction): void => {
   if (req.user?.accountType !== 'CHILD') {
-    return res.status(403).json({ error: 'This action requires a child account' });
+    res.status(403).json({ error: 'This action requires a child account' });
+    return;
   }
   next();
 };
 
 // Middleware to get the effective user ID (parent for child accounts, self for parent accounts)
 // This is useful for analytics where child accounts should see parent's data
-export const getEffectiveUserId = (req: Request, res: Response, next: NextFunction) => {
+export const getEffectiveUserId = (req: Request, res: Response, next: NextFunction): void => {
   if (req.user?.accountType === 'CHILD') {
-    req.effectiveUserId = req.user.parentId;
+    req.effectiveUserId = req.user.parentId || req.user.userId;
   } else {
-    req.effectiveUserId = req.user?.userId;
+    req.effectiveUserId = req.user?.userId || '';
   }
   next();
 };

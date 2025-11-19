@@ -24,13 +24,14 @@ const updateProjectSchema = z.object({
 });
 
 // Create a new project
-export const createProject = async (req: Request, res: Response) => {
+export const createProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, description } = createProjectSchema.parse(req.body);
     const userId = req.user?.userId;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     // Check if project name already exists for this user
@@ -42,13 +43,14 @@ export const createProject = async (req: Request, res: Response) => {
     });
 
     if (existingProject) {
-      return res.status(400).json({ error: 'Project name already exists' });
+      res.status(400).json({ error: 'Project name already exists' });
+      return;
     }
 
     const project = await prisma.project.create({
       data: {
         name,
-        description,
+        description: description || null,
         userId,
       },
     });
@@ -59,7 +61,8 @@ export const createProject = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues?.[0]?.message || 'Validation error' });
+      return;
     }
     logger.error('Project creation failed:', error);
     res.status(500).json({ error: 'Failed to create project' });
@@ -131,14 +134,20 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
 };
 
 // Get a specific project
-export const getProject = async (req: Request, res: Response) => {
+export const getProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.userId;
     const userType = req.user?.accountType;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    if (!id) {
+      res.status(400).json({ error: 'Project ID is required' });
+      return;
     }
 
     // Build query based on user type
@@ -156,7 +165,8 @@ export const getProject = async (req: Request, res: Response) => {
       });
 
       if (!hasAccess) {
-        return res.status(403).json({ error: 'Access denied to this project' });
+        res.status(403).json({ error: 'Access denied to this project' });
+        return;
       }
     }
 
@@ -173,7 +183,8 @@ export const getProject = async (req: Request, res: Response) => {
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+      res.status(404).json({ error: 'Project not found' });
+      return;
     }
 
     res.json({ project });
@@ -184,14 +195,20 @@ export const getProject = async (req: Request, res: Response) => {
 };
 
 // Update a project
-export const updateProject = async (req: Request, res: Response) => {
+export const updateProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updateData = updateProjectSchema.parse(req.body);
     const userId = req.user?.userId;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    if (!id) {
+      res.status(400).json({ error: 'Project ID is required' });
+      return;
     }
 
     // Only project owner can update
@@ -203,7 +220,8 @@ export const updateProject = async (req: Request, res: Response) => {
     });
 
     if (!existingProject) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
     }
 
     // If updating name, check for duplicates
@@ -217,13 +235,17 @@ export const updateProject = async (req: Request, res: Response) => {
       });
 
       if (duplicateProject) {
-        return res.status(400).json({ error: 'Project name already exists' });
+        res.status(400).json({ error: 'Project name already exists' });
+        return;
       }
     }
 
     const updatedProject = await prisma.project.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...(updateData.name && { name: updateData.name }),
+        ...(updateData.description !== undefined && { description: updateData.description || null }),
+      },
     });
 
     res.json({
@@ -232,7 +254,8 @@ export const updateProject = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues?.[0]?.message || 'Validation error' });
+      return;
     }
     logger.error('Project update failed:', error);
     res.status(500).json({ error: 'Failed to update project' });
@@ -240,13 +263,19 @@ export const updateProject = async (req: Request, res: Response) => {
 };
 
 // Delete a project
-export const deleteProject = async (req: Request, res: Response) => {
+export const deleteProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.userId;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    if (!id) {
+      res.status(400).json({ error: 'Project ID is required' });
+      return;
     }
 
     // Only project owner can delete
@@ -258,7 +287,8 @@ export const deleteProject = async (req: Request, res: Response) => {
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
     }
 
     // Delete project (will cascade to all related data)
@@ -274,7 +304,7 @@ export const deleteProject = async (req: Request, res: Response) => {
 };
 
 // Grant project access to child account
-export const grantProjectAccess = async (req: Request, res: Response) => {
+export const grantProjectAccess = async (req: Request, res: Response): Promise<void> => {
   try {
     // Support both URL param and body param for projectId
     const projectIdFromParams = req.params.projectId;
@@ -283,20 +313,24 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
     const parentUserId = req.user?.userId;
 
     if (!parentUserId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     if (!projectId) {
-      return res.status(400).json({ error: 'Project ID is required' });
+      res.status(400).json({ error: 'Project ID is required' });
+      return;
     }
 
     if (!childUserId) {
-      return res.status(400).json({ error: 'Child User ID is required' });
+      res.status(400).json({ error: 'Child User ID is required' });
+      return;
     }
 
     // Validate access type
     if (!['specific', 'all'].includes(accessType)) {
-      return res.status(400).json({ error: 'Invalid access type' });
+      res.status(400).json({ error: 'Invalid access type' });
+      return;
     }
 
     // Verify project ownership
@@ -308,7 +342,8 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
     }
 
     // Verify child account relationship
@@ -321,7 +356,8 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
     });
 
     if (!childUser) {
-      return res.status(404).json({ error: 'Child account not found' });
+      res.status(404).json({ error: 'Child account not found' });
+      return;
     }
 
     // Create or update access
@@ -360,32 +396,34 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
 };
 
 // Revoke project access from child account
-export const revokeProjectAccess = async (req: Request, res: Response) => {
+export const revokeProjectAccess = async (req: Request, res: Response): Promise<void> => {
   try {
     const { projectId, childUserId } = req.params;
     const parentUserId = req.user?.userId;
 
     if (!parentUserId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     // Verify project ownership
     const project = await prisma.project.findFirst({
       where: {
-        id: projectId,
-        userId: parentUserId,
+        ...(projectId ? { id: projectId } : {}),
+        ...(parentUserId ? { userId: parentUserId } : {})
       },
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
     }
 
     // Remove access
     await prisma.projectAccess.deleteMany({
       where: {
-        projectId,
-        userId: childUserId,
+        ...(projectId ? { projectId } : {}),
+        ...(childUserId ? { userId: childUserId } : {})
       },
     });
 
@@ -397,25 +435,27 @@ export const revokeProjectAccess = async (req: Request, res: Response) => {
 };
 
 // Get child accounts with project access information
-export const getProjectAccessList = async (req: Request, res: Response) => {
+export const getProjectAccessList = async (req: Request, res: Response): Promise<void> => {
   try {
     const { projectId } = req.params;
     const userId = req.user?.userId;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     // Verify project ownership
     const project = await prisma.project.findFirst({
       where: {
-        id: projectId,
-        userId,
+        ...(projectId ? { id: projectId } : {}),
+        ...(userId ? { userId } : {})
       },
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
     }
 
     // Get all child accounts and their access status
@@ -425,22 +465,23 @@ export const getProjectAccessList = async (req: Request, res: Response) => {
         accountType: 'CHILD',
       },
       include: {
-        projectAccess: {
-          where: {
-            projectId,
-          },
-        },
+        projectAccess: projectId ? {
+          where: { projectId },
+        } : true,
       },
     });
 
-    const accessList = childAccounts.map(child => ({
-      id: child.id,
-      name: child.name,
-      email: child.email,
-      hasAccess: child.projectAccess.length > 0,
-      accessType: child.projectAccess[0]?.accessType || null,
-      grantedAt: child.projectAccess[0]?.createdAt || null,
-    }));
+    const accessList = childAccounts.map(child => {
+      const pa = (child as any).projectAccess as any[] | undefined;
+      return {
+        id: child.id,
+        name: child.name,
+        email: child.email,
+        hasAccess: Array.isArray(pa) && pa.length > 0,
+        accessType: Array.isArray(pa) && pa[0]?.accessType ? pa[0].accessType : null,
+        grantedAt: Array.isArray(pa) && pa[0]?.createdAt ? pa[0].createdAt : null,
+      };
+    });
 
     res.json({ accessList });
   } catch (error) {

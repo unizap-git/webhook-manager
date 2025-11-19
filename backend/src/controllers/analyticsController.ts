@@ -423,13 +423,14 @@ export const getEventAnalytics = async (req: AuthRequest, res: Response, next: N
   }
 };
 
-export const getDebugEventData = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getDebugEventData = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.effectiveUserId;
     const { limit = 50 } = req.query;
 
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     // Get recent message events with raw payload data
@@ -544,11 +545,12 @@ export const getDebugEventData = async (req: AuthRequest, res: Response, next: N
 };
 
 // Enhanced Vendor-Channel Analytics
-export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.effectiveUserId;
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     const { period = '7d', startDate, endDate, projectId } = req.query;
@@ -696,11 +698,12 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
 };
 
 // Channel-wise Analytics
-export const getChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getChannelAnalytics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.effectiveUserId;
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     const { period = '7d', startDate, endDate, projectId } = req.query;
@@ -813,7 +816,7 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       }
 
       // Daily breakdown
-      const dateKey = event.timestamp.toISOString().split('T')[0];
+      const dateKey: string = event.timestamp?.toISOString()?.split('T')[0] || '';
       if (!stats.dailyStats[dateKey]) {
         stats.dailyStats[dateKey] = { sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
       }
@@ -885,11 +888,12 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
 };
 
 // Failure Reason Analytics
-export const getFailureAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getFailureAnalytics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.effectiveUserId;
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     const { period = '7d', startDate, endDate, vendorId, channelId, projectId } = req.query;
@@ -976,7 +980,7 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
       const vendor = event.message.vendor.name;
       const channel = event.message.channel.type;
       const vendorChannelKey = `${vendor}_${channel}`;
-      const dateKey = event.timestamp.toISOString().split('T')[0];
+      const dateKey: string = event.timestamp?.toISOString()?.split('T')[0] || '';
 
       // Overall failure reason stats
       if (!failureStats[failureReason]) {
@@ -1102,11 +1106,12 @@ function mapEventNameToStatus(eventName: string): string {
 }
 
 // Get project-wise analytics summary
-export const getProjectAnalytics = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getProjectAnalytics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.effectiveUserId;
     if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
     }
 
     const { period = '7d' } = req.query;
@@ -1137,8 +1142,7 @@ export const getProjectAnalytics = async (req: AuthRequest, res: Response, next:
                 },
               },
             },
-            vendors: true,
-            channels: true,
+            userVendorChannels: true,
           },
         },
       },
@@ -1180,9 +1184,9 @@ export const getProjectAnalytics = async (req: AuthRequest, res: Response, next:
           projectId: project.id,
           projectName: project.name,
           description: project.description,
-          vendorCount: project._count.vendors,
-          channelCount: project._count.channels,
-          messageCount: project._count.messages,
+          vendorCount: project._count?.userVendorChannels || 0,
+          channelCount: project._count?.userVendorChannels || 0,
+          messageCount: project._count?.messages || 0,
           totalMessages,
           totalSent,
           totalDelivered,

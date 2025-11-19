@@ -8,10 +8,16 @@ export const getChannels = async (req: Request, res: Response, next: NextFunctio
     
     let channels;
     if (projectId) {
-      // Get channels for a specific project
+      // Get channels used in a specific project via UserVendorChannel
       channels = await prisma.channel.findMany({
         where: {
-          projectId: projectId as string,
+          userVendorChannels: {
+            some: {
+              project: {
+                id: projectId as string,
+              },
+            },
+          },
         },
         orderBy: { type: 'asc' },
       });

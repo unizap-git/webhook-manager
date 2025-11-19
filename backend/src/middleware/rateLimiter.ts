@@ -7,6 +7,8 @@ interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
+    accountType: string;
+    parentId?: string;
   };
 }
 

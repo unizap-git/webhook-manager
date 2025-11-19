@@ -29,7 +29,7 @@ async function main() {
 
   for (const channel of channels) {
     await prisma.channel.upsert({
-      where: { type: channel.type },
+      where: { name: channel.name },
       update: {},
       create: channel,
     });

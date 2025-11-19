@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import { Worker, Queue } from 'bullmq';
-import { config } from '../config/database';
+import { env, getRedisConfig } from '../config/env';
 import { logger } from '../utils/logger';
 
 // Redis connection (optional in development)
@@ -10,10 +10,10 @@ let webhookQueue: Queue | null = null;
 // Only initialize Redis if not in development or if explicitly enabled
 if (process.env.NODE_ENV === 'production' || process.env.ENABLE_REDIS === 'true') {
   try {
-    redis = new Redis(config.redis.url, {
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
-      lazyConnect: true,
+    const redisConfig = getRedisConfig();
+    redis = new Redis({
+      ...redisConfig,
+      password: redisConfig.password ?? ''
     });
     
     // Create queue if Redis is available
@@ -77,8 +77,8 @@ function startWebhookWorker() {
     {
       connection: redis,
       concurrency: 5,
-      removeOnComplete: 100,
-      removeOnFail: 50,
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 50 },
     }
   );
 

@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
-export const receiveWebhook = async (req: Request, res: Response, next: NextFunction) => {
+export const receiveWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { project: projectName, vendor: vendorSlug, channel: channelType } = req.params;
     const { token } = req.query;
@@ -13,9 +13,10 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
 
     // Basic validation
     if (!projectName || !vendorSlug || !channelType) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Invalid webhook URL format. Expected: /webhook/{project}/{vendor}/{channel}',
       });
+      return;
     }
 
     logger.info(`Received webhook for project ${projectName}, vendor ${vendorSlug}, channel ${channelType}`);
@@ -28,9 +29,10 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
     });
 
     if (!project) {
-      return res.status(404).json({
+      res.status(404).json({
         error: `Project '${projectName}' not found`,
       });
+      return;
     }
 
     // Find the global vendor by slug
@@ -42,9 +44,10 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
     });
 
     if (!vendor) {
-      return res.status(404).json({
+      res.status(404).json({
         error: `Vendor '${vendorSlug}' not found or inactive`,
       });
+      return;
     }
 
     // Find the global channel by type
@@ -56,9 +59,10 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
     });
 
     if (!channel) {
-      return res.status(404).json({
+      res.status(404).json({
         error: `Channel '${channelType}' not found or inactive`,
       });
+      return;
     }
 
     // Get the user-vendor-channel mapping for this specific combination
@@ -74,18 +78,20 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
     });
 
     if (!userVendorChannel) {
-      return res.status(404).json({
+      res.status(404).json({
         error: `No configuration found for project '${projectName}', vendor '${vendor.name}', channel '${channel.name}'`,
       });
+      return;
     }
 
     // Verify webhook token matches (optional security check)
     if (token && userVendorChannel.webhookUrl) {
       const urlToken = new URL(userVendorChannel.webhookUrl).searchParams.get('token');
       if (urlToken !== token) {
-        return res.status(401).json({
+        res.status(401).json({
           error: 'Invalid webhook token',
         });
+        return;
       }
     }
 
@@ -97,9 +103,10 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
         const rawBody = JSON.stringify(webhookData);
         
         if (!verifyWebhookSignature(vendorSlug, rawBody, signature, userVendorChannel.webhookSecret)) {
-          return res.status(401).json({
+          res.status(401).json({
             error: 'Invalid webhook signature',
           });
+          return;
         }
         
         logger.info(`✅ ${vendor.name}: Webhook signature verified`);

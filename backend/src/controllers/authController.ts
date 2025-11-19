@@ -2,42 +2,46 @@ import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma, config } from '../config/database';
+import { prisma } from '../config/database';
+import { env } from '../config/env';
 import { logger } from '../utils/logger';
 
 interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
+    accountType: string;
+    parentId?: string;
   };
 }
 
 // Helper function to generate tokens
-const generateTokens = (userId: string, email: string) => {
+const generateTokens = (userId: string, email: string, accountType: string, parentId?: string) => {
   const accessToken = jwt.sign(
-    { userId, email },
-    config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
+    { userId, email, accountType, parentId },
+    env.JWT_ACCESS_SECRET || 'default-secret',
+    { expiresIn: env.JWT_ACCESS_EXPIRES_IN || '1h' } as jwt.SignOptions
   );
   
   const refreshToken = jwt.sign(
-    { userId, email },
-    config.jwt.refreshSecret,
-    { expiresIn: config.jwt.refreshExpiresIn }
+    { userId, email, accountType, parentId },
+    env.JWT_REFRESH_SECRET || 'default-refresh-secret',
+    { expiresIn: env.JWT_REFRESH_EXPIRES_IN || '7d' } as jwt.SignOptions
   );
   
   return { accessToken, refreshToken };
 };
 
-export const signup = async (req: Request, res: Response, next: NextFunction) => {
+export const signup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Validation failed',
         details: errors.array(),
       });
+      return;
     }
 
     const { name, email, password } = req.body;
@@ -48,9 +52,10 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
     });
 
     if (existingUser) {
-      return res.status(409).json({
+      res.status(409).json({
         error: 'User already exists with this email',
       });
+      return;
     }
 
     // Hash password
@@ -68,12 +73,14 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         id: true,
         name: true,
         email: true,
+        accountType: true,
+        parentId: true,
         createdAt: true,
       },
     });
 
     // Generate tokens
-    const { accessToken, refreshToken } = generateTokens(user.id, user.email);
+    const { accessToken, refreshToken } = generateTokens(user.id, user.email, user.accountType, user.parentId || undefined);
 
     logger.info(`New user registered: ${email}`);
 
@@ -91,15 +98,16 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
   }
 };
 
-export const login = async (req: Request, res: Response, next: NextFunction) => {
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Validation failed',
         details: errors.array(),
       });
+      return;
     }
 
     const { email, password } = req.body;
@@ -110,21 +118,23 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     });
 
     if (!user) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Invalid credentials',
       });
+      return;
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Invalid credentials',
       });
+      return;
     }
 
     // Generate tokens
-    const { accessToken, refreshToken } = generateTokens(user.id, user.email);
+    const { accessToken, refreshToken } = generateTokens(user.id, user.email, user.accountType, user.parentId || undefined);
 
     logger.info(`User logged in: ${email}`);
 
@@ -147,18 +157,19 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
+export const refreshToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { refreshToken: token } = req.body;
 
     if (!token) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Refresh token required',
       });
+      return;
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(token, config.jwt.refreshSecret) as {
+    const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET || 'default-refresh-secret') as {
       userId: string;
       email: string;
     };
@@ -169,15 +180,18 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     });
 
     if (!user) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'User not found',
       });
+      return;
     }
 
     // Generate new tokens
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(
       user.id,
-      user.email
+      user.email,
+      user.accountType,
+      user.parentId || undefined
     );
 
     res.json({
@@ -190,9 +204,10 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     logger.error('Refresh token error:', error);
     
     if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Invalid refresh token',
       });
+      return;
     }
     
     next(error);

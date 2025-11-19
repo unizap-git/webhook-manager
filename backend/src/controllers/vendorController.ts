@@ -7,6 +7,8 @@ interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
+    accountType: string;
+    parentId?: string;
   };
 }
 
@@ -87,15 +89,16 @@ export const getUserVendorChannels = async (req: AuthRequest, res: Response, nex
   }
 };
 
-export const addUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const addUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
     const { vendorId, channelId, projectId, webhookSecret } = req.body;
 
     if (!projectId || !vendorId || !channelId) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'projectId, vendorId, and channelId are required',
       });
+      return;
     }
 
     // Verify user has access to the project
@@ -116,9 +119,10 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
     });
 
     if (!project) {
-      return res.status(403).json({
+      res.status(403).json({
         error: 'Access denied to this project',
       });
+      return;
     }
 
     // Verify vendor and channel exist
@@ -131,9 +135,10 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
     });
 
     if (!vendor || !channel) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'Vendor or channel not found',
       });
+      return;
     }
 
     // Check if combination already exists
@@ -147,9 +152,10 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
     });
 
     if (existing) {
-      return res.status(409).json({
+      res.status(409).json({
         error: 'This vendor-channel combination already exists in this project',
       });
+      return;
     }
 
     // Generate unique webhook URL using project-based format
@@ -190,7 +196,7 @@ export const addUserVendorChannel = async (req: AuthRequest, res: Response, next
   }
 };
 
-export const removeUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const removeUserVendorChannel = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
     const { id } = req.params;
@@ -198,20 +204,21 @@ export const removeUserVendorChannel = async (req: AuthRequest, res: Response, n
     // Check if config exists and belongs to user
     const config = await prisma.userVendorChannel.findFirst({
       where: {
-        id,
+        ...(id ? { id } : {}),
         userId: userId!,
       },
     });
 
     if (!config) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'Configuration not found',
       });
+      return;
     }
 
     // Delete the configuration
     await prisma.userVendorChannel.delete({
-      where: { id },
+      where: { id: id! },
     });
 
     logger.info(`Vendor-channel config deleted for user ${userId}: ${id}`);

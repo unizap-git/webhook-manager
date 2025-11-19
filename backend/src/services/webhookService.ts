@@ -155,24 +155,24 @@ export async function processWebhookPayload(
 
     // Special handling for AiSensy project mapping
     let resolvedProjectId = projectId || config.projectId;
-    if (vendorSlug.toLowerCase() === 'aisensy' && parsedData.projectId) {
+    if (vendorSlug.toLowerCase() === 'aisensy' && (parsedData as any).projectId) {
       // Try to map AiSensy project_id to our project system
       const aisensyProject = await prisma.project.findFirst({
         where: {
           userId,
           // Try to match by external project ID or name
           OR: [
-            { name: parsedData.projectId },
-            { description: { contains: parsedData.projectId } }
+            { name: (parsedData as any).projectId },
+            { description: { contains: (parsedData as any).projectId } }
           ]
         }
       });
 
       if (aisensyProject) {
         resolvedProjectId = aisensyProject.id;
-        logger.info(`🔗 AiSensy: mapped project_id "${parsedData.projectId}" to project "${aisensyProject.name}"`);
+        logger.info(`🔗 AiSensy: mapped project_id "${(parsedData as any).projectId}" to project "${aisensyProject.name}"`);
       } else {
-        logger.warn(`⚠️ AiSensy: unknown project_id "${parsedData.projectId}", using default project`);
+        logger.warn(`⚠️ AiSensy: unknown project_id "${(parsedData as any).projectId}", using default project`);
       }
     }
 
