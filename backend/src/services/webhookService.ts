@@ -8,9 +8,12 @@ interface WebhookPayload {
 // Vendor-specific webhook parsers
 const webhookParsers = {
   msg91: parseMsg91Webhook,
+  MSG91: parseMsg91Webhook, // Alias for case-insensitive lookup
   karix: parseKarixWebhook,
   aisensy: parseAisensyWebhook,
+  AiSensy: parseAisensyWebhook, // Alias for case-insensitive lookup
   sendgrid: parseSendGridWebhook,
+  SendGrid: parseSendGridWebhook, // Alias for case-insensitive lookup
 };
 
 export async function processWebhookPayload(
@@ -131,7 +134,7 @@ export async function processWebhookPayload(
       },
     });
 
-    logger.info(`Processed webhook for message ${parsedData.messageId}: ${parsedData.status}`);
+    logger.info(`📨 ${vendor.name}: ${parsedData.status} | ${parsedData.messageId}`);
 
     // Update analytics cache (could be done in a separate job)
     await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId);
@@ -144,8 +147,6 @@ export async function processWebhookPayload(
 
 function parseMsg91Webhook(data: WebhookPayload, channelType: string) {
   // MSG91 webhook format parsing - Updated for new payload structure
-  console.log('Parsing Msg91 webhook:', JSON.stringify(data, null, 2));
-  console.log('Channel type:', channelType);
 
   // Extract message ID based on channel type
   const messageId = data.requestId || data.messageId || data.id || data.UUID || 'unknown';
@@ -279,11 +280,10 @@ function mapMsg91EventName(eventName: string, fallbackStatus?: string): string {
   const mappedStatus = eventMap[normalizedEventName];
   
   if (mappedStatus) {
-    console.log(`🔄 Mapping eventName "${eventName}" → status "${mappedStatus}"`);
     return mappedStatus;
   }
   
-  console.warn(`⚠️ Unknown eventName "${eventName}", defaulting to 'sent'`);
+  logger.warn(`📱 Unknown MSG91 event: ${eventName}`);
   return 'sent';
 }
 

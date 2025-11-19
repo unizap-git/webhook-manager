@@ -1,5 +1,6 @@
 import Redis, { Redis as RedisClient, RedisOptions } from 'ioredis';
 import { env, getRedisConfig, isDevelopment } from './env';
+import { logger } from '../utils/logger';
 
 export class RedisConnection {
   private static instance: RedisConnection;
@@ -41,41 +42,41 @@ export class RedisConnection {
 
       // Event handlers
       this.client.on('connect', () => {
-        console.log('✅ Connected to Redis');
+        logger.info('✅ Redis connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
       });
 
       this.client.on('ready', () => {
-        console.log('✅ Redis is ready to receive commands');
+        logger.info('✅ Redis ready');
       });
 
       this.client.on('error', (error) => {
-        console.error('❌ Redis connection error:', error.message);
+        logger.error('❌ Redis connection error:', error.message);
         this.isConnected = false;
         
         if (isDevelopment()) {
-          console.warn('⚠️  Redis unavailable in development mode - using fallback processing');
+          logger.warn('⚠️ Redis unavailable - using fallback');
         }
       });
 
       this.client.on('close', () => {
-        console.log('🔌 Redis connection closed');
+        // Redis connection closed
         this.isConnected = false;
       });
 
       this.client.on('reconnecting', (ms: number) => {
         this.reconnectAttempts++;
-        console.log(`🔄 Redis reconnecting in ${ms}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        // Redis reconnecting
         
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.error('❌ Max Redis reconnection attempts reached');
+          logger.error('❌ Max Redis reconnection attempts reached');
           this.client?.disconnect();
         }
       });
 
       this.client.on('end', () => {
-        console.log('📴 Redis connection ended');
+        // Redis connection ended
         this.isConnected = false;
       });
 
@@ -84,10 +85,10 @@ export class RedisConnection {
       
       return this.client;
     } catch (error) {
-      console.error('❌ Failed to connect to Redis:', error);
+      logger.error('❌ Failed to connect to Redis:', error);
       
       if (isDevelopment()) {
-        console.warn('⚠️  Continuing without Redis in development mode');
+        logger.warn('⚠️ Continuing without Redis in development');
         return null;
       } else {
         throw error;
@@ -99,9 +100,9 @@ export class RedisConnection {
     if (this.client) {
       try {
         await this.client.quit();
-        console.log('✅ Redis disconnected gracefully');
+        // Redis disconnected gracefully
       } catch (error) {
-        console.error('❌ Error disconnecting from Redis:', error);
+        logger.error('❌ Error disconnecting from Redis:', error);
         this.client.disconnect();
       } finally {
         this.client = null;
@@ -128,7 +129,7 @@ export class RedisConnection {
       const response = await this.client.ping();
       return response === 'PONG';
     } catch (error) {
-      console.error('❌ Redis ping failed:', error);
+      logger.error('❌ Redis ping failed:', error);
       return false;
     }
   }
@@ -160,7 +161,7 @@ export class RedisConnection {
         info
       };
     } catch (error) {
-      console.error('❌ Redis health check failed:', error);
+      logger.error('❌ Redis health check failed:', error);
       return { connected: false };
     }
   }
@@ -192,12 +193,12 @@ export const getRedisHealthStatus = async () => {
 
 // Graceful shutdown handler
 process.on('SIGTERM', async () => {
-  console.log('📴 SIGTERM received, closing Redis connection...');
+  logger.info('📴 SIGTERM: closing Redis connection...');
   await disconnectRedis();
 });
 
 process.on('SIGINT', async () => {
-  console.log('📴 SIGINT received, closing Redis connection...');
+  logger.info('📴 SIGINT: closing Redis connection...');
   await disconnectRedis();
 });
 

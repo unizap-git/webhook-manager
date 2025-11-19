@@ -97,15 +97,18 @@ app.use(errorHandler);
 // Initialize services and start server
 async function startServer() {
   try {
-    logger.info('🚀 Starting Communication Analytics Backend...');
+    // Clean startup banner
+    logger.info('');
+    logger.info('🚀 Communication Analytics Backend');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // Initialize Redis connection
     try {
       await getRedisClient();
-      logger.info('✅ Redis connection established');
+      logger.info('✅ Redis connected');
     } catch (error) {
       if (isDevelopment()) {
-        logger.warn('⚠️  Redis unavailable - continuing without queue processing');
+        logger.warn('⚠️  Redis unavailable - using fallback mode');
       } else {
         throw error;
       }
@@ -113,38 +116,40 @@ async function startServer() {
 
     // Initialize background workers
     await initializeWorkers();
-    logger.info('✅ Background workers initialized');
+    logger.info('✅ Workers initialized');
     
     // Start cron service - DISABLED for webhook testing
     // await cronService.start();
-    // logger.info('✅ Cron service started');
-    logger.info('⚠️ Cron service disabled for webhook testing');
+    logger.info('⚠️  Cron service disabled');
     
     // Start HTTP server
     const server = app.listen(env.PORT, () => {
-      logger.info(`✅ Server running on port ${env.PORT}`);
-      logger.info(`🌍 Environment: ${env.NODE_ENV}`);
-      logger.info(`🔗 Frontend URL: ${env.CORS_ORIGIN}`);
-      logger.info('🎉 Communication Analytics Backend is ready!');
+      logger.info(`🌐 Server: http://localhost:${env.PORT}`);
+      logger.info(`🔗 Frontend: ${env.CORS_ORIGIN}`);
+      logger.info(`📦 Environment: ${env.NODE_ENV}`);
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      logger.info('🎉 Ready for connections!');
+      logger.info('');
     });
 
     // Graceful shutdown handling
     const gracefulShutdown = async () => {
-      logger.info('📴 Shutting down gracefully...');
+      logger.info('');
+      logger.info('📴 Shutting down...');
       
       // Close HTTP server
       server.close(() => {
-        logger.info('✅ HTTP server closed');
+        logger.info('✅ Server stopped');
       });
 
       // Stop cron service
       try {
         await cronService.stop();
-        logger.info('✅ Cron service stopped');
       } catch (error) {
-        logger.error('❌ Error stopping cron service:', error);
+        // Silent error handling
       }
 
+      logger.info('👋 Goodbye!');
       process.exit(0);
     };
 

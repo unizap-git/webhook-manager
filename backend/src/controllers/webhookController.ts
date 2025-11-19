@@ -7,62 +7,64 @@ const prisma = new PrismaClient();
 
 export const receiveWebhook = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { project: projectName, vendor: vendorName, channel: channelName } = req.params;
+    const { project: projectName, vendor: vendorSlug, channel: channelType } = req.params;
     const { token } = req.query;
     const webhookData = req.body;
 
     // Basic validation
-    if (!projectName || !vendorName || !channelName) {
+    if (!projectName || !vendorSlug || !channelType) {
       return res.status(400).json({
         error: 'Invalid webhook URL format. Expected: /webhook/{project}/{vendor}/{channel}',
       });
     }
 
-    logger.info(`Received webhook for project ${projectName}, vendor ${vendorName}, channel ${channelName}`);
+    logger.info(`Received webhook for project ${projectName}, vendor ${vendorSlug}, channel ${channelType}`);
 
-    // Find the project, vendor, and channel combination
-    const projectData = await prisma.project.findFirst({
+    // Find the project
+    const project = await (prisma as any).project.findFirst({
       where: {
         name: projectName,
       },
-      include: {
-        vendors: {
-          where: {
-            name: vendorName,
-          },
-        },
-        channels: {
-          where: {
-            name: channelName,
-          },
-        },
-      },
     });
 
-    if (!projectData) {
+    if (!project) {
       return res.status(404).json({
         error: `Project '${projectName}' not found`,
       });
     }
 
-    const vendor = projectData.vendors.find(v => v.name === vendorName);
+    // Find the global vendor by slug
+    const vendor = await (prisma as any).vendor.findFirst({
+      where: {
+        slug: vendorSlug,
+        isActive: true,
+      },
+    });
+
     if (!vendor) {
       return res.status(404).json({
-        error: `Vendor '${vendorName}' not found in project '${projectName}'`,
+        error: `Vendor '${vendorSlug}' not found or inactive`,
       });
     }
 
-    const channel = projectData.channels.find(c => c.name === channelName);
+    // Find the global channel by type
+    const channel = await (prisma as any).channel.findFirst({
+      where: {
+        type: channelType,
+        isActive: true,
+      },
+    });
+
     if (!channel) {
       return res.status(404).json({
-        error: `Channel '${channelName}' not found in project '${projectName}'`,
+        error: `Channel '${channelType}' not found or inactive`,
       });
     }
 
-    // Get the user-vendor-channel mapping to find the user
-    const userVendorChannel = await prisma.userVendorChannel.findFirst({
+    // Get the user-vendor-channel mapping for this specific combination
+    const userVendorChannel = await (prisma as any).userVendorChannel.findFirst({
       where: {
-        projectId: projectData.id,
+        projectId: project.id,
         vendorId: vendor.id,
         channelId: channel.id,
       },
@@ -73,8 +75,18 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
 
     if (!userVendorChannel) {
       return res.status(404).json({
-        error: `No user mapping found for project '${projectName}', vendor '${vendorName}', channel '${channelName}'`,
+        error: `No configuration found for project '${projectName}', vendor '${vendor.name}', channel '${channel.name}'`,
       });
+    }
+
+    // Verify webhook token matches (optional security check)
+    if (token && userVendorChannel.webhookUrl) {
+      const urlToken = new URL(userVendorChannel.webhookUrl).searchParams.get('token');
+      if (urlToken !== token) {
+        return res.status(401).json({
+          error: 'Invalid webhook token',
+        });
+      }
     }
 
     const userId = userVendorChannel.userId;
@@ -87,9 +99,9 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
           {
             webhookData,
             userId,
-            vendor: vendorName,
-            channel: channelName,
-            projectId: projectData.id,
+            vendor: vendor.slug,
+            channel: channel.type,
+            projectId: project.id,
             vendorId: vendor.id,
             channelId: channel.id,
             token,
@@ -109,9 +121,9 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
         await processWebhookPayload(
           webhookData, 
           userId, 
-          vendorName, 
-          channelName, 
-          projectData.id,
+          vendor.slug, 
+          channel.type, 
+          project.id,
           vendor.id,
           channel.id
         );
@@ -123,9 +135,9 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
       await processWebhookPayload(
         webhookData, 
         userId, 
-        vendorName, 
-        channelName, 
-        projectData.id,
+        vendor.slug, 
+        channel.type, 
+        project.id,
         vendor.id,
         channel.id
       );
@@ -136,8 +148,8 @@ export const receiveWebhook = async (req: Request, res: Response, next: NextFunc
       success: true,
       message: 'Webhook received and processed',
       project: projectName,
-      vendor: vendorName,
-      channel: channelName,
+      vendor: vendor.name,
+      channel: channel.name,
     });
   } catch (error) {
     logger.error('Webhook receive error:', error);

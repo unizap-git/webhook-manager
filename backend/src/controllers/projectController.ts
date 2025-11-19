@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database';
+import { logger } from '../utils/logger';
 
 interface AuthRequest extends Request {
   user?: {
@@ -60,7 +61,7 @@ export const createProject = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Error creating project:', error);
+    logger.error('Project creation failed:', error);
     res.status(500).json({ error: 'Failed to create project' });
   }
 };
@@ -123,7 +124,7 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
     res.json({ projects });
     return;
   } catch (error) {
-    console.error('Error fetching projects:', error);
+    logger.error('Failed to fetch projects:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
     return;
   }
@@ -177,7 +178,7 @@ export const getProject = async (req: Request, res: Response) => {
 
     res.json({ project });
   } catch (error) {
-    console.error('Error fetching project:', error);
+    logger.error('Failed to fetch project:', error);
     res.status(500).json({ error: 'Failed to fetch project' });
   }
 };
@@ -233,7 +234,7 @@ export const updateProject = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Error updating project:', error);
+    logger.error('Project update failed:', error);
     res.status(500).json({ error: 'Failed to update project' });
   }
 };
@@ -267,7 +268,7 @@ export const deleteProject = async (req: Request, res: Response) => {
 
     res.json({ message: 'Project deleted successfully' });
   } catch (error) {
-    console.error('Error deleting project:', error);
+    logger.error('Project deletion failed:', error);
     res.status(500).json({ error: 'Failed to delete project' });
   }
 };
@@ -342,7 +343,7 @@ export const grantProjectAccess = async (req: Request, res: Response) => {
       projectAccess,
     });
   } catch (error) {
-    console.error('Error granting project access:', error);
+    logger.error('Failed to grant project access:', error);
     res.status(500).json({ error: 'Failed to grant project access' });
   }
 };
@@ -379,7 +380,7 @@ export const revokeProjectAccess = async (req: Request, res: Response) => {
 
     res.json({ message: 'Project access revoked successfully' });
   } catch (error) {
-    console.error('Error revoking project access:', error);
+    logger.error('Failed to revoke project access:', error);
     res.status(500).json({ error: 'Failed to revoke project access' });
   }
 };
@@ -432,7 +433,7 @@ export const getProjectAccessList = async (req: Request, res: Response) => {
 
     res.json({ accessList });
   } catch (error) {
-    console.error('Error fetching project access list:', error);
+    logger.error('Failed to fetch project access list:', error);
     res.status(500).json({ error: 'Failed to fetch project access list' });
   }
 };

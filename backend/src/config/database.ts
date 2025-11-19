@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
 export const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'], // Removed 'query' to reduce noise
 });
 
 export const config = {

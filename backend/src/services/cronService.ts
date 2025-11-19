@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { env, isDevelopment } from '../config/env';
 import { AnalyticsService } from './analyticsService';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 export interface CronJobConfig {
   name: string;
@@ -32,12 +33,12 @@ export class CronService {
 
   public async start(): Promise<void> {
     if (this.isStarted) {
-      console.log('⏰ Cron service is already running');
+      logger.info('⏰ Cron service already running');
       return;
     }
 
     try {
-      console.log('🚀 Starting cron service...');
+      logger.info('🚀 Starting cron service...');
       
       // Define all cron jobs
       const jobConfigs: CronJobConfig[] = [
@@ -74,30 +75,30 @@ export class CronService {
       }
 
       this.isStarted = true;
-      console.log('✅ Cron service started successfully');
+      logger.info('✅ Cron service started');
 
     } catch (error) {
-      console.error('❌ Failed to start cron service:', error);
+      logger.error('❌ Failed to start cron service:', error);
       throw error;
     }
   }
 
   public async stop(): Promise<void> {
     try {
-      console.log('⏹️  Stopping cron service...');
+      logger.info('⏹️ Stopping cron service...');
 
       // Destroy all scheduled tasks
       for (const [name, task] of this.jobs) {
         task.destroy();
-        console.log(`  - Stopped job: ${name}`);
+        // Job stopped silently
       }
 
       this.jobs.clear();
       this.isStarted = false;
 
-      console.log('✅ Cron service stopped successfully');
+      logger.info('✅ Cron service stopped');
     } catch (error) {
-      console.error('❌ Error stopping cron service:', error);
+      logger.error('❌ Error stopping cron service:', error);
       throw error;
     }
   }
@@ -106,7 +107,7 @@ export class CronService {
     const { name, schedule, task, enabled = true, runOnStart = false } = config;
 
     if (!enabled) {
-      console.log(`⏭️  Skipping disabled job: ${name}`);
+      // Skip disabled jobs silently
       return;
     }
 
@@ -119,30 +120,30 @@ export class CronService {
       // Create the scheduled task
       const scheduledTask = cron.schedule(schedule, async () => {
         const startTime = Date.now();
-        console.log(`⏰ Running cron job: ${name}`);
+        // Job running
 
         try {
           await task();
           const duration = Date.now() - startTime;
-          console.log(`✅ Completed cron job: ${name} (${duration}ms)`);
+          // Job completed
         } catch (error) {
-          console.error(`❌ Error in cron job ${name}:`, error);
+          logger.error(`❌ Cron job failed: ${name}`, error);
         }
       }, {
         timezone: 'UTC'
       });
 
       this.jobs.set(name, scheduledTask);
-      console.log(`📅 Scheduled cron job: ${name} (${schedule})`);
+      logger.info(`📅 Scheduled: ${name} (${schedule})`);
 
       // Run immediately if requested
       if (runOnStart) {
-        console.log(`🏃 Running ${name} on startup...`);
+        // Run startup job silently
         await task();
       }
 
     } catch (error) {
-      console.error(`❌ Failed to schedule job ${name}:`, error);
+      logger.error(`❌ Failed to schedule job ${name}:`, error);
       throw error;
     }
   }
@@ -150,7 +151,7 @@ export class CronService {
   // Analytics aggregation job
   private async aggregateAnalytics(): Promise<void> {
     try {
-      console.log('📊 Starting analytics aggregation...');
+      // Starting analytics aggregation
       
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -164,13 +165,13 @@ export class CronService {
         try {
           await this.analyticsService.aggregateUserAnalytics(user.id, oneHourAgo, now);
         } catch (error) {
-          console.error(`Failed to aggregate analytics for user ${user.id}:`, error);
+          logger.error(`Failed to aggregate analytics for user ${user.id}:`, error);
         }
       }
 
-      console.log('✅ Analytics aggregation completed');
+      // Analytics aggregation completed
     } catch (error) {
-      console.error('❌ Analytics aggregation failed:', error);
+      logger.error('❌ Analytics aggregation failed:', error);
       throw error;
     }
   }
@@ -178,7 +179,7 @@ export class CronService {
   // Cleanup old data job
   private async cleanupOldData(): Promise<void> {
     try {
-      console.log('🧹 Starting data cleanup...');
+      // Starting data cleanup
 
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - env.ANALYTICS_CLEANUP_DAYS);
@@ -201,9 +202,9 @@ export class CronService {
         }
       });
 
-      console.log(`✅ Cleanup completed: ${deletedAnalytics.count} analytics entries, ${deletedEvents.count} events removed`);
+      logger.info(`🧹 Cleanup: ${deletedAnalytics.count} analytics, ${deletedEvents.count} events removed`);
     } catch (error) {
-      console.error('❌ Data cleanup failed:', error);
+      logger.error('❌ Data cleanup failed:', error);
       throw error;
     }
   }
@@ -211,7 +212,7 @@ export class CronService {
   // Refresh analytics cache job
   private async refreshAnalyticsCache(): Promise<void> {
     try {
-      console.log('🔄 Refreshing analytics cache...');
+      // Refreshing analytics cache
 
       const users = await this.prisma.user.findMany({
         select: { id: true }
@@ -230,13 +231,13 @@ export class CronService {
             forceRefresh: true
           });
         } catch (error) {
-          console.error(`Failed to refresh cache for user ${user.id}:`, error);
+          logger.error(`Failed to refresh cache for user ${user.id}:`, error);
         }
       }
 
-      console.log('✅ Analytics cache refresh completed');
+      // Cache refresh completed
     } catch (error) {
-      console.error('❌ Analytics cache refresh failed:', error);
+      logger.error('❌ Cache refresh failed:', error);
       throw error;
     }
   }
@@ -265,10 +266,10 @@ export class CronService {
       });
 
       if (isDevelopment()) {
-        console.log(`🏥 Health check: ${recentMessages} messages, ${recentEvents} events in last 5 minutes`);
+        // Health check passed
       }
     } catch (error) {
-      console.error('❌ Health check failed:', error);
+      logger.error('❌ Health check failed:', error);
       throw error;
     }
   }
@@ -289,7 +290,7 @@ export class CronService {
       throw new Error(`Job not found: ${jobName}`);
     }
 
-    console.log(`🏃 Manually triggering job: ${jobName}`);
+    // Manually triggering job
     // We need to manually call the task function since cron doesn't expose it
     // This is a simplified version - in production you might want to store task references
     switch (jobName) {
@@ -320,12 +321,12 @@ const cronService = CronService.getInstance();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('📴 SIGTERM received, stopping cron service...');
+  logger.info('📴 SIGTERM received, stopping cron service...');
   await cronService.stop();
 });
 
 process.on('SIGINT', async () => {
-  console.log('📴 SIGINT received, stopping cron service...');
+  logger.info('📴 SIGINT received, stopping cron service...');
   await cronService.stop();
 });
 

@@ -29,10 +29,7 @@ export const authenticateToken = async (
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    logger.info(`Auth attempt for ${req.method} ${req.path}, token present: ${!!token}`);
-
     if (!token) {
-      logger.warn(`No token provided for ${req.method} ${req.path}`);
       return res.status(401).json({
         error: 'Access token required',
       });
@@ -53,11 +50,8 @@ export const authenticateToken = async (
     });
 
     if (!user) {
-      logger.warn(`Invalid token - user not found for ${req.method} ${req.path}, userId: ${decoded.userId}`);
       return res.status(401).json({ error: 'Invalid token - user not found' });
     }
-
-    logger.info(`Authentication successful for ${req.method} ${req.path}, user: ${user.email}`);
 
     req.user = {
       userId: user.id,
@@ -68,11 +62,9 @@ export const authenticateToken = async (
 
     next();
   } catch (error) {
-    logger.error(`JWT verification failed for ${req.method} ${req.path}:`, error);
-    
     if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({
-        error: 'Invalid token',
+        error: 'Invalid token format',
       });
     }
     

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 /**
  * User authentication schemas
@@ -248,7 +249,7 @@ export const validate = (schema: z.ZodSchema<any>) => {
       }
 
       // Handle other validation errors
-      console.error('Validation middleware error:', error);
+      logger.error('Validation processing failed:', error);
       res.status(500).json({
         error: 'Internal Server Error',
         message: 'Validation processing failed',
