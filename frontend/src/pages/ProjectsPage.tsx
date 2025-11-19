@@ -155,7 +155,7 @@ const ProjectsPage: React.FC = () => {
   };
 
   if (loading) {
-    return <LoadingState message="Loading projects..." />;
+    return <LoadingState loading={true} error={null}>Loading projects...</LoadingState>;
   }
 
   return (

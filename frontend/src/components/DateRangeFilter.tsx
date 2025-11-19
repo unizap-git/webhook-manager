@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
   Chip,
   SelectChangeEvent,
 } from '@mui/material';
@@ -159,7 +158,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
               {getDisplayLabel()}
               {value === 'custom' && customRange.startDate && customRange.endDate && (
                 <Chip 
-                  label={`${customRange.startDate.toLocaleDateString()} - ${customRange.endDate.toLocaleDateString()}`}
+                  label={`${customRange.startDate.format('MM/DD/YYYY')} - ${customRange.endDate.format('MM/DD/YYYY')}`}
                   size="small"
                   sx={{ ml: 1 }}
                 />
@@ -187,7 +186,11 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
                 value={customRange.startDate}
                 onChange={(date) => setCustomRange(prev => ({ ...prev, startDate: date }))}
                 maxDate={customRange.endDate || dayjs()}
-                renderInput={(params) => <TextField {...params} fullWidth />}
+                slotProps={{
+                  textField: {
+                    fullWidth: true
+                  }
+                }}
               />
               <DatePicker
                 label="End Date"
@@ -195,7 +198,11 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
                 onChange={(date) => setCustomRange(prev => ({ ...prev, endDate: date }))}
                 minDate={customRange.startDate}
                 maxDate={dayjs()}
-                renderInput={(params) => <TextField {...params} fullWidth />}
+                slotProps={{
+                  textField: {
+                    fullWidth: true
+                  }
+                }}
               />
             </Box>
           </LocalizationProvider>

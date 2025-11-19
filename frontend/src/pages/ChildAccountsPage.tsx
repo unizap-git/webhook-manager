@@ -83,15 +83,12 @@ const ChildAccountsPage: React.FC = () => {
     formState: { errors },
     reset,
     setValue,
-    watch,
   } = useForm<CreateChildFormData>({
     resolver: zodResolver(createChildSchema),
     defaultValues: {
       projectIds: [],
     },
   });
-
-  const watchedProjectIds = watch('projectIds');
 
   useEffect(() => {
     fetchChildAccounts();
@@ -218,15 +215,6 @@ const ChildAccountsPage: React.FC = () => {
     } catch (error) {
       enqueueSnackbar('Failed to copy password', { variant: 'error' });
     }
-  };
-
-  const handleProjectToggle = (projectId: string) => {
-    setSelectedProjects(prev => {
-      const newSelected = prev.includes(projectId)
-        ? prev.filter(id => id !== projectId)
-        : [...prev, projectId];
-      return newSelected;
-    });
   };
 
   const handleSelectAllProjects = () => {

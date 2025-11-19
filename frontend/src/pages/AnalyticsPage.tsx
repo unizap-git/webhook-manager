@@ -24,7 +24,6 @@ import {
   Visibility,
   Error,
   BarChart,
-  Analytics,
   BugReport,
   Compare,
 } from '@mui/icons-material';
@@ -111,7 +110,7 @@ const AnalyticsPage: React.FC = () => {
     fetchAnalytics(period);
   }, [period, selectedProjectId]); // Re-fetch when project changes
 
-  const handlePeriodChange = (newPeriod: string, customRange?: any) => {
+  const handlePeriodChange = (newPeriod: string) => {
     setPeriod(newPeriod);
   };
 
@@ -225,7 +224,6 @@ const AnalyticsPage: React.FC = () => {
                   </Typography>
                   <PerformanceChip 
                     value={summary.deliveryRate}
-                    sx={{ ml: 2 }}
                     showIcon
                   />
                 </Box>

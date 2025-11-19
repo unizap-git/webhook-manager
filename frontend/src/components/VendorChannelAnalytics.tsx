@@ -38,8 +38,6 @@ import {
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
 import { 
-  getPerformanceColor, 
-  getPerformanceIcon, 
   formatPercentage, 
   formatDate,
   PerformanceChip 
@@ -143,16 +141,19 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
         apiCall('get', `/analytics/channels?${queryParams.toString()}`)
       ]);
       
+      const vcResult = vendorChannelResult as any;
+      const cResult = channelResult as any;
+      
       const combinedData: CombinedAnalyticsData = {
-        vendorChannelStats: vendorChannelResult.vendorChannelStats,
-        channelStats: channelResult.channelStats,
+        vendorChannelStats: vcResult.vendorChannelStats,
+        channelStats: cResult.channelStats,
         summary: {
-          totalVendorChannelCombinations: vendorChannelResult.summary.totalVendorChannelCombinations,
-          totalChannels: channelResult.summary.totalChannels,
-          totalMessages: Math.max(vendorChannelResult.summary.totalMessages, channelResult.summary.totalMessages),
+          totalVendorChannelCombinations: vcResult.summary.totalVendorChannelCombinations,
+          totalChannels: cResult.summary.totalChannels,
+          totalMessages: Math.max(vcResult.summary.totalMessages, cResult.summary.totalMessages),
         },
         period: selectedPeriod,
-        dateRange: vendorChannelResult.dateRange || channelResult.dateRange,
+        dateRange: vcResult.dateRange || cResult.dateRange,
       };
       
       setData(combinedData);
@@ -204,7 +205,7 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
     const headers = Object.keys(csvData[0] || {});
     const csvContent = [
       headers.join(','),
-      ...csvData.map(row => headers.map(header => row[header]).join(','))
+      ...csvData.map(row => headers.map(header => (row as any)[header]).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });

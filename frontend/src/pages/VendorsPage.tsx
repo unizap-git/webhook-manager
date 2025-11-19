@@ -31,7 +31,6 @@ import { useSnackbar } from 'notistack';
 
 import { apiCall } from '../api/client';
 import { Vendor, Channel, UserVendorChannel } from '../types/api';
-import { useProject } from '../contexts/ProjectContext';
 
 interface AddConfigFormData {
   vendorId: string;
@@ -51,7 +50,7 @@ const VendorsPage: React.FC = () => {
   const [addLoading, setAddLoading] = useState(false);
 
   const { enqueueSnackbar } = useSnackbar();
-  const { selectedProjectId, isAllProjects } = useProject();
+  // const { selectedProjectId, isAllProjects } = useProject();
 
   const {
     control,

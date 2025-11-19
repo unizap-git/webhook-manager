@@ -119,6 +119,8 @@ webhook-manager/
    VITE_API_BASE_URL=https://your-backend-url.onrender.com/api
    ```
 
+**Note**: If you encounter TypeScript compilation errors during deployment, they have been fixed in the latest codebase. Ensure you're deploying from the latest commit.
+
 ### Step 3: Update CORS Configuration
 
 After both deployments are complete:
