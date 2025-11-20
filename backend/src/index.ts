@@ -102,16 +102,16 @@ async function startServer() {
     logger.info('🚀 Communication Analytics Backend');
     logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    // Initialize Redis connection
+    // Initialize Redis connection (optional)
     try {
-      await getRedisClient();
-      logger.info('✅ Redis connected');
-    } catch (error) {
-      if (isDevelopment()) {
-        logger.warn('⚠️  Redis unavailable - using fallback mode');
+      const redis = await getRedisClient();
+      if (redis) {
+        logger.info('✅ Redis connected');
       } else {
-        throw error;
+        logger.warn('⚠️  Redis unavailable - using fallback mode');
       }
+    } catch (error) {
+      logger.warn('⚠️  Redis connection failed - using fallback mode');
     }
 
     // Initialize background workers

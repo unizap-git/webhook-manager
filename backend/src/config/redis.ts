@@ -31,11 +31,18 @@ export class RedisConnection {
         port: redisConfig.port,
         ...(redisConfig.password && { password: redisConfig.password }),
         db: redisConfig.db,
-        connectTimeout: 10000,
+        connectTimeout: 5000,
         lazyConnect: true,
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 1,
         enableAutoPipelining: true,
         keepAlive: 30000,
+        retryStrategy: (times) => {
+          if (times > 2) {
+            // Stop retrying after 2 attempts
+            return null;
+          }
+          return Math.min(times * 1000, 3000);
+        },
       };
 
       this.client = new Redis(options);
@@ -52,12 +59,10 @@ export class RedisConnection {
       });
 
       this.client.on('error', (error) => {
-        logger.error('❌ Redis connection error:', error.message);
+        logger.error('❌ Redis connection error:');
+        logger.warn('⚠️ Redis unavailable - using fallback');
         this.isConnected = false;
-        
-        if (isDevelopment()) {
-          logger.warn('⚠️ Redis unavailable - using fallback');
-        }
+        // Don't throw error - just log it
       });
 
       this.client.on('close', () => {
@@ -86,13 +91,8 @@ export class RedisConnection {
       return this.client;
     } catch (error) {
       logger.error('❌ Failed to connect to Redis:', error);
-      
-      if (isDevelopment()) {
-        logger.warn('⚠️ Continuing without Redis in development');
-        return null;
-      } else {
-        throw error;
-      }
+      logger.warn('⚠️ Continuing without Redis - queue processing will use fallback mode');
+      return null;
     }
   }
 
