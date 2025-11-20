@@ -81,21 +81,48 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       whereClause.projectId = projectId as string;
     }
 
-    // Get aggregated stats
-    const stats = await prisma.analyticsCache.aggregate({
+    // Get all cache entries (to handle deduplication properly)
+    const cacheEntries = await prisma.analyticsCache.findMany({
       where: whereClause,
-      _sum: {
-        totalSent: true,
-        totalDelivered: true,
-        totalRead: true,
-        totalFailed: true,
+      orderBy: {
+        date: 'asc',
       },
     });
 
-    const totalSent = stats._sum.totalSent || 0;
-    const totalDelivered = stats._sum.totalDelivered || 0;
-    const totalRead = stats._sum.totalRead || 0;
-    const totalFailed = stats._sum.totalFailed || 0;
+    // Deduplicate by date, vendorId, channelId (in case of duplicate entries)
+    const deduplicatedMap = new Map();
+    cacheEntries.forEach((entry) => {
+      const dateKey = new Date(entry.date).toISOString().split('T')[0];
+      const key = `${dateKey}_${entry.vendorId}_${entry.channelId}_${entry.projectId}`;
+
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, {
+          date: entry.date,
+          dateKey,
+          vendorId: entry.vendorId,
+          channelId: entry.channelId,
+          projectId: entry.projectId,
+          totalSent: 0,
+          totalDelivered: 0,
+          totalRead: 0,
+          totalFailed: 0,
+        });
+      }
+
+      const existing = deduplicatedMap.get(key);
+      existing.totalSent += entry.totalSent || 0;
+      existing.totalDelivered += entry.totalDelivered || 0;
+      existing.totalRead += entry.totalRead || 0;
+      existing.totalFailed += entry.totalFailed || 0;
+    });
+
+    const deduplicatedEntries = Array.from(deduplicatedMap.values());
+
+    // Calculate summary stats from deduplicated entries
+    const totalSent = deduplicatedEntries.reduce((sum, e) => sum + e.totalSent, 0);
+    const totalDelivered = deduplicatedEntries.reduce((sum, e) => sum + e.totalDelivered, 0);
+    const totalRead = deduplicatedEntries.reduce((sum, e) => sum + e.totalRead, 0);
+    const totalFailed = deduplicatedEntries.reduce((sum, e) => sum + e.totalFailed, 0);
     const totalMessages = totalSent + totalDelivered + totalRead + totalFailed;
 
     // Calculate rates
@@ -103,80 +130,72 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
     const readRate = totalMessages > 0 ? totalRead / totalMessages * 100 : 0;
     const failureRate = totalMessages > 0 ? totalFailed / totalMessages * 100 : 0;
 
-    // Get daily breakdown for charts
-    const dailyStats = await prisma.analyticsCache.groupBy({
-      by: ['date'],
-      where: whereClause,
-      _sum: {
-        totalSent: true,
-        totalDelivered: true,
-        totalRead: true,
-        totalFailed: true,
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
-
-    // Get vendor breakdown
-    const vendorStats = await prisma.analyticsCache.groupBy({
-      by: ['vendorId'],
-      where: whereClause,
-      _sum: {
-        totalSent: true,
-        totalDelivered: true,
-        totalRead: true,
-        totalFailed: true,
-      },
-      _count: {
-        vendorId: true,
-      },
-    });
-
-    // Get vendor names
-    const vendorIds = vendorStats.map((stat: any) => stat.vendorId).filter(Boolean);
-    const vendors = await prisma.vendor.findMany({
-      where: { id: { in: vendorIds } },
-    });
-
-    const vendorStatsWithNames = vendorStats.map((stat: any) => {
-      const vendor = vendors.find(v => v.id === stat.vendorId);
-      const total = (stat._sum.totalSent || 0) + (stat._sum.totalDelivered || 0) + 
-                   (stat._sum.totalRead || 0) + (stat._sum.totalFailed || 0);
-      const successRate = total > 0 ? 
-        ((stat._sum.totalDelivered || 0) + (stat._sum.totalRead || 0)) / total * 100 : 0;
-      
-      return {
-        vendorId: stat.vendorId,
-        vendorName: vendor?.name || 'Unknown',
-        totalMessages: total,
-        successRate: Math.round(successRate * 100) / 100,
-        ...stat._sum,
-      };
-    });
-
-    // Deduplicate dailyStats by date (in case of duplicate cache entries)
+    // Group deduplicated entries by date for daily stats
     const dailyStatsMap = new Map();
-    dailyStats.forEach((stat: any) => {
-      const dateKey = new Date(stat.date).toISOString().split('T')[0];
-      if (!dailyStatsMap.has(dateKey)) {
-        dailyStatsMap.set(dateKey, {
-          date: stat.date,
+    deduplicatedEntries.forEach((entry) => {
+      if (!dailyStatsMap.has(entry.dateKey)) {
+        dailyStatsMap.set(entry.dateKey, {
+          date: entry.date,
           totalSent: 0,
           totalDelivered: 0,
           totalRead: 0,
           totalFailed: 0,
         });
       }
-      const existing = dailyStatsMap.get(dateKey);
-      existing.totalSent += stat._sum.totalSent || 0;
-      existing.totalDelivered += stat._sum.totalDelivered || 0;
-      existing.totalRead += stat._sum.totalRead || 0;
-      existing.totalFailed += stat._sum.totalFailed || 0;
+
+      const dailyStat = dailyStatsMap.get(entry.dateKey);
+      dailyStat.totalSent += entry.totalSent;
+      dailyStat.totalDelivered += entry.totalDelivered;
+      dailyStat.totalRead += entry.totalRead;
+      dailyStat.totalFailed += entry.totalFailed;
     });
 
-    // Convert back to array and calculate rates
-    const deduplicatedDailyStats = Array.from(dailyStatsMap.values()).map((stat: any) => {
+    // Group deduplicated entries by vendor
+    const vendorStatsMap = new Map();
+    deduplicatedEntries.forEach((entry) => {
+      if (!vendorStatsMap.has(entry.vendorId)) {
+        vendorStatsMap.set(entry.vendorId, {
+          vendorId: entry.vendorId,
+          totalSent: 0,
+          totalDelivered: 0,
+          totalRead: 0,
+          totalFailed: 0,
+        });
+      }
+
+      const vendorStat = vendorStatsMap.get(entry.vendorId);
+      vendorStat.totalSent += entry.totalSent;
+      vendorStat.totalDelivered += entry.totalDelivered;
+      vendorStat.totalRead += entry.totalRead;
+      vendorStat.totalFailed += entry.totalFailed;
+    });
+
+    // Get vendor names
+    const vendorIds = Array.from(vendorStatsMap.keys()).filter(Boolean);
+    const vendors = await prisma.vendor.findMany({
+      where: { id: { in: vendorIds } },
+    });
+
+    const vendorStatsWithNames = Array.from(vendorStatsMap.values()).map((stat: any) => {
+      const vendor = vendors.find(v => v.id === stat.vendorId);
+      const total = stat.totalSent + stat.totalDelivered + stat.totalRead + stat.totalFailed;
+      const successRate = total > 0 ?
+        ((stat.totalDelivered + stat.totalRead) / total * 100) : 0;
+
+      return {
+        vendorId: stat.vendorId,
+        vendorName: vendor?.name || 'Unknown',
+        totalMessages: total,
+        successRate: Math.round(successRate * 100) / 100,
+        totalSent: stat.totalSent,
+        totalDelivered: stat.totalDelivered,
+        totalRead: stat.totalRead,
+        totalFailed: stat.totalFailed,
+      };
+    });
+
+    // Format daily stats with success rates
+    const formattedDailyStats = Array.from(dailyStatsMap.values()).map((stat: any) => {
       const totalMessages = stat.totalSent + stat.totalDelivered + stat.totalRead + stat.totalFailed;
       const successRate = totalMessages > 0 ?
         ((stat.totalDelivered + stat.totalRead) / totalMessages * 100) : 0;
@@ -203,7 +222,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
         readRate: Math.round(readRate * 100) / 100,
         failureRate: Math.round(failureRate * 100) / 100,
       },
-      dailyStats: deduplicatedDailyStats,
+      dailyStats: formattedDailyStats,
       vendorStats: vendorStatsWithNames,
       period,
     });

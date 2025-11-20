@@ -288,10 +288,11 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                           </TableCell>
                           <TableCell align="right">
                             {reason.vendors.map((v, i) => (
-                              <Chip 
+                              <Chip
                                 key={i}
                                 label={`${v.vendor} (${v.count})`}
                                 size="small"
+                                color="warning"
                                 sx={{ mr: 0.5, mb: 0.5 }}
                               />
                             ))}
