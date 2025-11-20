@@ -118,11 +118,56 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
 
     const deduplicatedEntries = Array.from(deduplicatedMap.values());
 
-    // Calculate summary stats from deduplicated entries
-    const totalSent = deduplicatedEntries.reduce((sum, e) => sum + e.totalSent, 0);
-    const totalDelivered = deduplicatedEntries.reduce((sum, e) => sum + e.totalDelivered, 0);
-    const totalRead = deduplicatedEntries.reduce((sum, e) => sum + e.totalRead, 0);
-    const totalFailed = deduplicatedEntries.reduce((sum, e) => sum + e.totalFailed, 0);
+    // Get actual message counts from messageEvent table for accuracy (same as vendor-channel endpoint)
+    const messageWhereClause: any = {
+      message: {
+        userId,
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    };
+
+    if (vendorId) {
+      messageWhereClause.message.vendorId = vendorId as string;
+    }
+
+    if (channelId) {
+      messageWhereClause.message.channelId = channelId as string;
+    }
+
+    if (projectId && projectId !== 'all') {
+      messageWhereClause.message.projectId = projectId as string;
+    }
+
+    // Get all message events to calculate accurate summary
+    const messageEvents = await prisma.messageEvent.findMany({
+      where: messageWhereClause,
+      select: {
+        messageId: true,
+        status: true,
+      },
+    });
+
+    // Count unique messages by status (same logic as vendor-channel endpoint)
+    const uniqueMessagesByStatus: { [key: string]: Set<string> } = {
+      sent: new Set(),
+      delivered: new Set(),
+      read: new Set(),
+      failed: new Set(),
+    };
+
+    messageEvents.forEach(event => {
+      if (event.status && uniqueMessagesByStatus[event.status]) {
+        uniqueMessagesByStatus[event.status]?.add(event.messageId);
+      }
+    });
+
+    const totalSent = uniqueMessagesByStatus['sent']?.size || 0;
+    const totalDelivered = uniqueMessagesByStatus['delivered']?.size || 0;
+    const totalRead = uniqueMessagesByStatus['read']?.size || 0;
+    const totalFailed = uniqueMessagesByStatus['failed']?.size || 0;
     const totalMessages = totalSent + totalDelivered + totalRead + totalFailed;
 
     // Calculate rates
@@ -134,8 +179,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
     const dailyStatsMap = new Map();
     deduplicatedEntries.forEach((entry) => {
       if (!dailyStatsMap.has(entry.dateKey)) {
+        // Create a normalized date at UTC midnight for consistency
+        const normalizedDate = new Date(entry.dateKey + 'T00:00:00.000Z');
         dailyStatsMap.set(entry.dateKey, {
-          date: entry.date,
+          date: normalizedDate,
+          dateKey: entry.dateKey,
           totalSent: 0,
           totalDelivered: 0,
           totalRead: 0,
