@@ -340,13 +340,10 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Chip 
+                            <Chip
                               label={vcFailure.channel.toUpperCase()}
                               size="small"
-                              color={
-                                vcFailure.channel.toLowerCase() === 'sms' ? 'primary' :
-                                vcFailure.channel.toLowerCase() === 'whatsapp' ? 'success' : 'error'
-                              }
+                              color={getChannelColor(vcFailure.channel)}
                             />
                           </TableCell>
                           <TableCell align="right">

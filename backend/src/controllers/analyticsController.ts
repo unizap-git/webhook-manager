@@ -155,6 +155,43 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       };
     });
 
+    // Deduplicate dailyStats by date (in case of duplicate cache entries)
+    const dailyStatsMap = new Map();
+    dailyStats.forEach((stat: any) => {
+      const dateKey = new Date(stat.date).toISOString().split('T')[0];
+      if (!dailyStatsMap.has(dateKey)) {
+        dailyStatsMap.set(dateKey, {
+          date: stat.date,
+          totalSent: 0,
+          totalDelivered: 0,
+          totalRead: 0,
+          totalFailed: 0,
+        });
+      }
+      const existing = dailyStatsMap.get(dateKey);
+      existing.totalSent += stat._sum.totalSent || 0;
+      existing.totalDelivered += stat._sum.totalDelivered || 0;
+      existing.totalRead += stat._sum.totalRead || 0;
+      existing.totalFailed += stat._sum.totalFailed || 0;
+    });
+
+    // Convert back to array and calculate rates
+    const deduplicatedDailyStats = Array.from(dailyStatsMap.values()).map((stat: any) => {
+      const totalMessages = stat.totalSent + stat.totalDelivered + stat.totalRead + stat.totalFailed;
+      const successRate = totalMessages > 0 ?
+        ((stat.totalDelivered + stat.totalRead) / totalMessages * 100) : 0;
+
+      return {
+        date: stat.date,
+        totalMessages,
+        successRate,
+        totalSent: stat.totalSent,
+        totalDelivered: stat.totalDelivered,
+        totalRead: stat.totalRead,
+        totalFailed: stat.totalFailed,
+      };
+    });
+
     res.json({
       summary: {
         totalMessages,
@@ -166,18 +203,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
         readRate: Math.round(readRate * 100) / 100,
         failureRate: Math.round(failureRate * 100) / 100,
       },
-      dailyStats: dailyStats.map((stat: any) => ({
-        date: stat.date,
-        totalMessages: (stat._sum.totalSent || 0) + (stat._sum.totalDelivered || 0) + 
-                      (stat._sum.totalRead || 0) + (stat._sum.totalFailed || 0),
-        successRate: (() => {
-          const total = (stat._sum.totalSent || 0) + (stat._sum.totalDelivered || 0) + 
-                       (stat._sum.totalRead || 0) + (stat._sum.totalFailed || 0);
-          return total > 0 ? 
-            ((stat._sum.totalDelivered || 0) + (stat._sum.totalRead || 0)) / total * 100 : 0;
-        })(),
-        ...stat._sum,
-      })),
+      dailyStats: deduplicatedDailyStats,
       vendorStats: vendorStatsWithNames,
       period,
     });
@@ -600,6 +626,7 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
 
     // Process vendor-channel analytics
     const vendorChannelStats: { [key: string]: any } = {};
+    const uniqueMessages: { [key: string]: Set<string> } = {}; // Track unique message IDs per vendor-channel
 
     messageEvents.forEach(event => {
       const vendor = event.message.vendor.name;
@@ -621,10 +648,15 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
           readRate: 0,
           failureRate: 0,
         };
+        uniqueMessages[key] = new Set();
       }
 
       const stats = vendorChannelStats[key];
-      stats.totalMessages += 1;
+
+      // Count unique messages only
+      if (uniqueMessages[key]) {
+        uniqueMessages[key].add(event.messageId);
+      }
 
       // Parse raw payload for detailed analytics
       let eventName = event.status;
@@ -656,7 +688,10 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
     });
 
     // Calculate rates for each vendor-channel combination
-    Object.values(vendorChannelStats).forEach((stats: any) => {
+    Object.entries(vendorChannelStats).forEach(([key, stats]: [string, any]) => {
+      // Set the actual unique message count
+      stats.totalMessages = uniqueMessages[key]?.size || 0;
+
       if (stats.totalMessages > 0) {
         stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
         stats.readRate = Math.round((stats.read / stats.totalMessages) * 10000) / 100;
@@ -750,6 +785,7 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
 
     // Process channel analytics
     const channelStats: { [key: string]: any } = {};
+    const uniqueMessagesByChannel: { [key: string]: Set<string> } = {}; // Track unique message IDs per channel
 
     messageEvents.forEach(event => {
       const channel = event.message.channel.type;
@@ -770,10 +806,15 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
           failureRate: 0,
           dailyStats: {},
         };
+        uniqueMessagesByChannel[channel] = new Set();
       }
 
       const stats = channelStats[channel];
-      stats.totalMessages += 1;
+
+      // Count unique messages only
+      if (uniqueMessagesByChannel[channel]) {
+        uniqueMessagesByChannel[channel].add(event.messageId);
+      }
 
       // Count by status
       if (event.status === 'sent') stats.sent += 1;
@@ -829,7 +870,10 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
     });
 
     // Calculate rates and format data
-    Object.values(channelStats).forEach((stats: any) => {
+    Object.entries(channelStats).forEach(([channel, stats]: [string, any]) => {
+      // Set the actual unique message count
+      stats.totalMessages = uniqueMessagesByChannel[channel]?.size || 0;
+
       if (stats.totalMessages > 0) {
         stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
         stats.readRate = Math.round((stats.read / stats.totalMessages) * 10000) / 100;
