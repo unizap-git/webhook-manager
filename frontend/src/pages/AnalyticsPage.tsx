@@ -16,6 +16,7 @@ import {
   Tabs,
   Tab,
   Paper,
+  TablePagination,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -80,7 +81,18 @@ const AnalyticsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState('7d');
   const [tabValue, setTabValue] = useState(0);
+  const [dailyStatsPage, setDailyStatsPage] = useState(0);
+  const [dailyStatsRowsPerPage, setDailyStatsRowsPerPage] = useState(10);
   const { selectedProjectId, isAllProjects } = useProject();
+
+  // Format date to DD-MM-YYYY
+  const formatDateToDDMMYYYY = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
 
   const fetchAnalytics = async (selectedPeriod: string) => {
     try {
@@ -359,24 +371,38 @@ const AnalyticsPage: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {dailyStats.map((day, index) => (
-                      <TableRow key={index}>
-                        <TableCell component="th" scope="row">
-                          {new Date(day.date).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell align="right">{day.totalMessages}</TableCell>
-                        <TableCell align="right">{day.totalSent}</TableCell>
-                        <TableCell align="right">{day.totalDelivered}</TableCell>
-                        <TableCell align="right">{day.totalRead}</TableCell>
-                        <TableCell align="right">{day.totalFailed}</TableCell>
-                        <TableCell align="center" sx={{ textAlign: 'center' }}>
-                          <PerformanceChip value={day.successRate} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {dailyStats
+                      .slice(dailyStatsPage * dailyStatsRowsPerPage, dailyStatsPage * dailyStatsRowsPerPage + dailyStatsRowsPerPage)
+                      .map((day, index) => (
+                        <TableRow key={index}>
+                          <TableCell component="th" scope="row">
+                            {formatDateToDDMMYYYY(day.date)}
+                          </TableCell>
+                          <TableCell align="right">{day.totalMessages}</TableCell>
+                          <TableCell align="right">{day.totalSent}</TableCell>
+                          <TableCell align="right">{day.totalDelivered}</TableCell>
+                          <TableCell align="right">{day.totalRead}</TableCell>
+                          <TableCell align="right">{day.totalFailed}</TableCell>
+                          <TableCell align="center" sx={{ textAlign: 'center' }}>
+                            <PerformanceChip value={day.successRate} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[10, 25, 50]}
+                component="div"
+                count={dailyStats.length}
+                rowsPerPage={dailyStatsRowsPerPage}
+                page={dailyStatsPage}
+                onPageChange={(_, newPage) => setDailyStatsPage(newPage)}
+                onRowsPerPageChange={(event) => {
+                  setDailyStatsRowsPerPage(parseInt(event.target.value, 10));
+                  setDailyStatsPage(0);
+                }}
+              />
             </CardContent>
           </Card>
         )}

@@ -17,6 +17,7 @@ import {
   AccordionDetails,
   Paper,
   Button,
+  TablePagination,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -93,7 +94,18 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [dailyFailuresPage, setDailyFailuresPage] = useState(0);
+  const [dailyFailuresRowsPerPage, setDailyFailuresRowsPerPage] = useState(10);
   const { selectedProjectId, isAllProjects } = useProject();
+
+  // Get channel color based on channel type
+  const getChannelColor = (channel: string): 'primary' | 'error' | 'success' => {
+    const channelLower = channel.toLowerCase();
+    if (channelLower === 'sms') return 'primary'; // Blue
+    if (channelLower === 'email') return 'error'; // Red
+    if (channelLower === 'whatsapp') return 'success'; // Green
+    return 'primary'; // Default to blue
+  };
 
   const fetchData = async (selectedPeriod: string) => {
     try {
@@ -286,11 +298,11 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                           </TableCell>
                           <TableCell align="right">
                             {reason.channels.map((c, i) => (
-                              <Chip 
+                              <Chip
                                 key={i}
                                 label={`${c.channel} (${c.count})`}
                                 size="small"
-                                color="secondary"
+                                color={getChannelColor(c.channel)}
                                 sx={{ mr: 0.5, mb: 0.5 }}
                               />
                             ))}
@@ -432,31 +444,45 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {data.dailyFailures.slice(-7).map((day, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{formatDate(day.date)}</TableCell>
-                            <TableCell align="right">
-                              <Chip
-                                label={day.totalFailures}
-                                color="error"
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              {day.reasons.slice(0, 3).map((reason, reasonIndex) => (
+                        {data.dailyFailures
+                          .slice(dailyFailuresPage * dailyFailuresRowsPerPage, dailyFailuresPage * dailyFailuresRowsPerPage + dailyFailuresRowsPerPage)
+                          .map((day, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{formatDate(day.date)}</TableCell>
+                              <TableCell align="right">
                                 <Chip
-                                  key={reasonIndex}
-                                  label={`${reason.reason} (${reason.count})`}
+                                  label={day.totalFailures}
+                                  color="error"
                                   size="small"
-                                  sx={{ mr: 0.5, mb: 0.5 }}
                                 />
-                              ))}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell>
+                                {day.reasons.slice(0, 3).map((reason, reasonIndex) => (
+                                  <Chip
+                                    key={reasonIndex}
+                                    label={`${reason.reason} (${reason.count})`}
+                                    size="small"
+                                    sx={{ mr: 0.5, mb: 0.5 }}
+                                  />
+                                ))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  <TablePagination
+                    rowsPerPageOptions={[10, 25, 50]}
+                    component="div"
+                    count={data.dailyFailures.length}
+                    rowsPerPage={dailyFailuresRowsPerPage}
+                    page={dailyFailuresPage}
+                    onPageChange={(_, newPage) => setDailyFailuresPage(newPage)}
+                    onRowsPerPageChange={(event) => {
+                      setDailyFailuresRowsPerPage(parseInt(event.target.value, 10));
+                      setDailyFailuresPage(0);
+                    }}
+                  />
                 </CardContent>
               </Card>
             )}
