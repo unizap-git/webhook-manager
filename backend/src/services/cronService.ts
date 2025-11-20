@@ -1,7 +1,7 @@
 import * as cron from 'node-cron';
 import { env, isDevelopment } from '../config/env';
 import { AnalyticsService } from './analyticsService';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 
 export interface CronJobConfig {
@@ -15,12 +15,10 @@ export interface CronJobConfig {
 export class CronService {
   private static instance: CronService;
   private jobs: Map<string, cron.ScheduledTask> = new Map();
-  private prisma: PrismaClient;
   private analyticsService: AnalyticsService;
   private isStarted: boolean = false;
 
   private constructor() {
-    this.prisma = new PrismaClient();
     this.analyticsService = new AnalyticsService();
   }
 
@@ -157,7 +155,7 @@ export class CronService {
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
       // Get all users for aggregation
-      const users = await this.prisma.user.findMany({
+      const users = await prisma.user.findMany({
         select: { id: true }
       });
 
@@ -185,7 +183,7 @@ export class CronService {
       cutoffDate.setDate(cutoffDate.getDate() - env.ANALYTICS_CLEANUP_DAYS);
 
       // Clean old analytics cache entries
-      const deletedAnalytics = await this.prisma.analyticsCache.deleteMany({
+      const deletedAnalytics = await prisma.analyticsCache.deleteMany({
         where: {
           date: {
             lt: cutoffDate
@@ -194,7 +192,7 @@ export class CronService {
       });
 
       // Clean old message events (keep recent ones for debugging)
-      const deletedEvents = await this.prisma.messageEvent.deleteMany({
+      const deletedEvents = await prisma.messageEvent.deleteMany({
         where: {
           timestamp: {
             lt: cutoffDate
@@ -214,7 +212,7 @@ export class CronService {
     try {
       // Refreshing analytics cache
 
-      const users = await this.prisma.user.findMany({
+      const users = await prisma.user.findMany({
         select: { id: true }
       });
 
@@ -246,10 +244,10 @@ export class CronService {
   private async performHealthCheck(): Promise<void> {
     try {
       // Check database connectivity
-      await this.prisma.$queryRaw`SELECT 1`;
-      
+      await prisma.$queryRaw`SELECT 1`;
+
       // Check for any stuck jobs or unusual patterns
-      const recentMessages = await this.prisma.message.count({
+      const recentMessages = await prisma.message.count({
         where: {
           createdAt: {
             gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
@@ -257,7 +255,7 @@ export class CronService {
         }
       });
 
-      const recentEvents = await this.prisma.messageEvent.count({
+      const recentEvents = await prisma.messageEvent.count({
         where: {
           timestamp: {
             gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes

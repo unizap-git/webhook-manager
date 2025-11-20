@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 
 export interface AnalyticsQuery {
@@ -19,10 +19,8 @@ export interface AnalyticsSummary {
 }
 
 export class AnalyticsService {
-  private prisma: PrismaClient;
-
   constructor() {
-    this.prisma = new PrismaClient();
+    // Using shared prisma instance from config
   }
 
   /**
@@ -67,7 +65,7 @@ export class AnalyticsService {
       logger.info(`Aggregating analytics for user ${userId} from ${startDate} to ${endDate}`);
 
       // Get all vendor-channel combinations for this user
-      const userVendorChannels = await this.prisma.userVendorChannel.findMany({
+      const userVendorChannels = await prisma.userVendorChannel.findMany({
         where: { userId },
         include: {
           vendor: true,
@@ -124,7 +122,7 @@ export class AnalyticsService {
     if (channelId) whereClause.channelId = channelId;
 
     // Get all messages with their latest events
-    const messages = await this.prisma.message.findMany({
+    const messages = await prisma.message.findMany({
       where: whereClause,
       include: {
         events: {
@@ -197,7 +195,7 @@ export class AnalyticsService {
       const date = new Date(startDate);
       date.setHours(0, 0, 0, 0);
 
-      await this.prisma.analyticsCache.upsert({
+      await prisma.analyticsCache.upsert({
         where: {
           userId_vendorId_channelId_projectId_date: {
             userId,
@@ -255,7 +253,7 @@ export class AnalyticsService {
       if (vendorId) whereClause.vendorId = vendorId;
       if (channelId) whereClause.channelId = channelId;
 
-      const cachedData = await this.prisma.analyticsCache.aggregate({
+      const cachedData = await prisma.analyticsCache.aggregate({
         where: whereClause,
         _sum: {
           totalSent: true,
@@ -309,7 +307,7 @@ export class AnalyticsService {
       const date = new Date(startDate);
       date.setHours(0, 0, 0, 0);
 
-      await this.prisma.analyticsCache.upsert({
+      await prisma.analyticsCache.upsert({
         where: {
           userId_vendorId_channelId_projectId_date: {
             userId,
@@ -350,7 +348,7 @@ export class AnalyticsService {
    */
   async getFailureReasons(userId: string, startDate: Date, endDate: Date): Promise<Array<{reason: string, count: number}>> {
     try {
-      const failureBreakdown = await this.prisma.messageEvent.groupBy({
+      const failureBreakdown = await prisma.messageEvent.groupBy({
         by: ['reason'],
         where: {
           message: {
@@ -395,7 +393,7 @@ export class AnalyticsService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
 
-      const result = await this.prisma.analyticsCache.deleteMany({
+      const result = await prisma.analyticsCache.deleteMany({
         where: {
           date: {
             lt: cutoffDate

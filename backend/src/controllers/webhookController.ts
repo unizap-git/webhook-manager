@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { webhookQueue } from '../workers';
 import { logger } from '../utils/logger';
-
-const prisma = new PrismaClient();
 
 export const receiveWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
