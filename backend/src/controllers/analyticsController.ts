@@ -60,65 +60,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
     // Calculate date range using helper function
     const { startDate, endDate } = calculateDateRange(period as string);
 
-    // Build where clause
-    const whereClause: any = {
-      userId,
-      date: {
-        gte: startDate,
-        lte: endDate,
-      },
-    };
-
-    if (vendorId) {
-      whereClause.vendorId = vendorId as string;
-    }
-
-    if (channelId) {
-      whereClause.channelId = channelId as string;
-    }
-
-    if (projectId && projectId !== 'all') {
-      whereClause.projectId = projectId as string;
-    }
-
-    // Get all cache entries (to handle deduplication properly)
-    const cacheEntries = await prisma.analyticsCache.findMany({
-      where: whereClause,
-      orderBy: {
-        date: 'asc',
-      },
-    });
-
-    // Deduplicate by date, vendorId, channelId (in case of duplicate entries)
-    const deduplicatedMap = new Map();
-    cacheEntries.forEach((entry) => {
-      const dateKey = new Date(entry.date).toISOString().split('T')[0];
-      const key = `${dateKey}_${entry.vendorId}_${entry.channelId}_${entry.projectId}`;
-
-      if (!deduplicatedMap.has(key)) {
-        deduplicatedMap.set(key, {
-          date: entry.date,
-          dateKey,
-          vendorId: entry.vendorId,
-          channelId: entry.channelId,
-          projectId: entry.projectId,
-          totalSent: 0,
-          totalDelivered: 0,
-          totalRead: 0,
-          totalFailed: 0,
-        });
-      }
-
-      const existing = deduplicatedMap.get(key);
-      existing.totalSent += entry.totalSent || 0;
-      existing.totalDelivered += entry.totalDelivered || 0;
-      existing.totalRead += entry.totalRead || 0;
-      existing.totalFailed += entry.totalFailed || 0;
-    });
-
-    const deduplicatedEntries = Array.from(deduplicatedMap.values());
-
-    // Get actual message counts from messageEvent table for accuracy (same as vendor-channel endpoint)
+    // Get actual message counts from messageEvent table for accuracy
     const messageWhereClause: any = {
       message: {
         userId,
@@ -141,49 +83,79 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       messageWhereClause.message.projectId = projectId as string;
     }
 
-    // Get all message events to calculate accurate summary
+    // Get all message events with timestamp to determine latest status
     const messageEvents = await prisma.messageEvent.findMany({
       where: messageWhereClause,
       select: {
         messageId: true,
         status: true,
+        timestamp: true,
+        message: {
+          select: {
+            createdAt: true,
+            vendorId: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
       },
     });
 
-    // Count unique messages by status (same logic as vendor-channel endpoint)
-    const uniqueMessagesByStatus: { [key: string]: Set<string> } = {
-      sent: new Set(),
-      delivered: new Set(),
-      read: new Set(),
-      failed: new Set(),
-    };
+    // Group events by messageId and get the LATEST event for each message
+    const latestEventByMessage = new Map<string, { status: string; timestamp: Date; createdAt: Date; vendorId: string }>();
 
     messageEvents.forEach(event => {
-      if (event.status && uniqueMessagesByStatus[event.status]) {
-        uniqueMessagesByStatus[event.status]?.add(event.messageId);
+      const existing = latestEventByMessage.get(event.messageId);
+      if (!existing || new Date(event.timestamp) > new Date(existing.timestamp)) {
+        latestEventByMessage.set(event.messageId, {
+          status: event.status,
+          timestamp: event.timestamp,
+          createdAt: event.message.createdAt,
+          vendorId: event.message.vendorId,
+        });
       }
     });
 
-    const totalSent = uniqueMessagesByStatus['sent']?.size || 0;
-    const totalDelivered = uniqueMessagesByStatus['delivered']?.size || 0;
-    const totalRead = uniqueMessagesByStatus['read']?.size || 0;
-    const totalFailed = uniqueMessagesByStatus['failed']?.size || 0;
-    const totalMessages = totalSent + totalDelivered + totalRead + totalFailed;
+    // Count unique messages by their FINAL status only
+    const statusCounts = {
+      sent: 0,
+      delivered: 0,
+      read: 0,
+      failed: 0,
+    };
+
+    latestEventByMessage.forEach(({ status }) => {
+      if (status === 'sent') statusCounts.sent += 1;
+      else if (status === 'delivered') statusCounts.delivered += 1;
+      else if (status === 'read') statusCounts.read += 1;
+      else if (status === 'failed') statusCounts.failed += 1;
+    });
+
+    const totalSent = statusCounts.sent;
+    const totalDelivered = statusCounts.delivered;
+    const totalRead = statusCounts.read;
+    const totalFailed = statusCounts.failed;
+    const totalMessages = latestEventByMessage.size;
 
     // Calculate rates
     const deliveryRate = totalMessages > 0 ? (totalDelivered + totalRead) / totalMessages * 100 : 0;
     const readRate = totalMessages > 0 ? totalRead / totalMessages * 100 : 0;
     const failureRate = totalMessages > 0 ? totalFailed / totalMessages * 100 : 0;
 
-    // Group deduplicated entries by date for daily stats
+    // Group unique messages by date for daily stats (using final status only)
     const dailyStatsMap = new Map();
-    deduplicatedEntries.forEach((entry) => {
-      if (!dailyStatsMap.has(entry.dateKey)) {
+
+    latestEventByMessage.forEach((eventData, messageId) => {
+      // Extract date from message.createdAt
+      const dateKey = new Date(eventData.createdAt).toISOString().split('T')[0];
+
+      if (!dailyStatsMap.has(dateKey)) {
         // Create a normalized date at UTC midnight for consistency
-        const normalizedDate = new Date(entry.dateKey + 'T00:00:00.000Z');
-        dailyStatsMap.set(entry.dateKey, {
+        const normalizedDate = new Date(dateKey + 'T00:00:00.000Z');
+        dailyStatsMap.set(dateKey, {
           date: normalizedDate,
-          dateKey: entry.dateKey,
+          dateKey: dateKey,
           totalSent: 0,
           totalDelivered: 0,
           totalRead: 0,
@@ -191,19 +163,22 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
         });
       }
 
-      const dailyStat = dailyStatsMap.get(entry.dateKey);
-      dailyStat.totalSent += entry.totalSent;
-      dailyStat.totalDelivered += entry.totalDelivered;
-      dailyStat.totalRead += entry.totalRead;
-      dailyStat.totalFailed += entry.totalFailed;
+      const dailyStat = dailyStatsMap.get(dateKey);
+
+      // Count by final status only (one count per message)
+      if (eventData.status === 'sent') dailyStat.totalSent += 1;
+      else if (eventData.status === 'delivered') dailyStat.totalDelivered += 1;
+      else if (eventData.status === 'read') dailyStat.totalRead += 1;
+      else if (eventData.status === 'failed') dailyStat.totalFailed += 1;
     });
 
-    // Group deduplicated entries by vendor
+    // Group unique messages by vendor (using final status only)
     const vendorStatsMap = new Map();
-    deduplicatedEntries.forEach((entry) => {
-      if (!vendorStatsMap.has(entry.vendorId)) {
-        vendorStatsMap.set(entry.vendorId, {
-          vendorId: entry.vendorId,
+
+    latestEventByMessage.forEach((eventData, messageId) => {
+      if (!vendorStatsMap.has(eventData.vendorId)) {
+        vendorStatsMap.set(eventData.vendorId, {
+          vendorId: eventData.vendorId,
           totalSent: 0,
           totalDelivered: 0,
           totalRead: 0,
@@ -211,11 +186,13 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
         });
       }
 
-      const vendorStat = vendorStatsMap.get(entry.vendorId);
-      vendorStat.totalSent += entry.totalSent;
-      vendorStat.totalDelivered += entry.totalDelivered;
-      vendorStat.totalRead += entry.totalRead;
-      vendorStat.totalFailed += entry.totalFailed;
+      const vendorStat = vendorStatsMap.get(eventData.vendorId);
+
+      // Count by final status only (one count per message)
+      if (eventData.status === 'sent') vendorStat.totalSent += 1;
+      else if (eventData.status === 'delivered') vendorStat.totalDelivered += 1;
+      else if (eventData.status === 'read') vendorStat.totalRead += 1;
+      else if (eventData.status === 'failed') vendorStat.totalFailed += 1;
     });
 
     // Get vendor names
@@ -691,11 +668,21 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       },
     });
 
-    // Process vendor-channel analytics
-    const vendorChannelStats: { [key: string]: any } = {};
-    const uniqueMessages: { [key: string]: Set<string> } = {}; // Track unique message IDs per vendor-channel
+    // First, get the latest event for each unique message
+    const latestEventByMessageVC = new Map<string, any>();
 
     messageEvents.forEach(event => {
+      const existing = latestEventByMessageVC.get(event.messageId);
+      if (!existing || new Date(event.timestamp) > new Date(existing.timestamp)) {
+        latestEventByMessageVC.set(event.messageId, event);
+      }
+    });
+
+    // Process vendor-channel analytics using ONLY the latest event per message
+    const vendorChannelStats: { [key: string]: any } = {};
+    const uniqueMessagesVC: { [key: string]: Set<string> } = {}; // Track unique message IDs per vendor-channel
+
+    latestEventByMessageVC.forEach(event => {
       const vendor = event.message.vendor.name;
       const channel = event.message.channel.type;
       const key = `${vendor}_${channel}`;
@@ -715,14 +702,14 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
           readRate: 0,
           failureRate: 0,
         };
-        uniqueMessages[key] = new Set();
+        uniqueMessagesVC[key] = new Set();
       }
 
       const stats = vendorChannelStats[key];
 
       // Count unique messages only
-      if (uniqueMessages[key]) {
-        uniqueMessages[key].add(event.messageId);
+      if (uniqueMessagesVC[key]) {
+        uniqueMessagesVC[key].add(event.messageId);
       }
 
       // Parse raw payload for detailed analytics
@@ -739,7 +726,7 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
         logger.error('Error parsing raw payload:', error);
       }
 
-      // Count by event status
+      // Count by FINAL event status only (one count per message)
       if (event.status === 'sent') stats.sent += 1;
       else if (event.status === 'delivered') stats.delivered += 1;
       else if (event.status === 'read') stats.read += 1;
@@ -757,7 +744,7 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
     // Calculate rates for each vendor-channel combination
     Object.entries(vendorChannelStats).forEach(([key, stats]: [string, any]) => {
       // Set the actual unique message count
-      stats.totalMessages = uniqueMessages[key]?.size || 0;
+      stats.totalMessages = uniqueMessagesVC[key]?.size || 0;
 
       if (stats.totalMessages > 0) {
         stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
