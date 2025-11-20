@@ -57,7 +57,23 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function App() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  // Show loading screen while Zustand is rehydrating from localStorage
+  if (!_hasHydrated) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontSize: '18px',
+        color: '#666'
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <Routes>
