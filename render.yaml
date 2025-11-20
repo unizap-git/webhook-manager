@@ -1,0 +1,28 @@
+services:
+  # Backend API Service
+  - type: web
+    name: webhook-manager-be
+    env: node
+    region: singapore
+    buildCommand: cd backend && npm install && npx prisma generate && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+    rootDir: ./
+
+  # Frontend Static Site
+  - type: web
+    name: webhook-manager
+    env: static
+    region: singapore
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    pullRequestPreviewsEnabled: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    rootDir: ./
