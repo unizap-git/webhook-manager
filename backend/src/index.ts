@@ -22,7 +22,7 @@ import projectRoutes from './routes/projects';
 // Services
 import { initializeWorkers } from './workers';
 import cronService from './services/cronService';
-import { getRedisClient } from './config/redis';
+import { getRedisClient, isRedisAvailable } from './config/redis';
 
 const app = express();
 
@@ -45,9 +45,8 @@ app.use(requestLogger);
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
-    const redisClient = await getRedisClient();
-    const redisStatus = redisClient ? 'connected' : 'disconnected';
-    
+    const redisStatus = isRedisAvailable() ? 'connected' : 'disconnected';
+
     res.status(200).json({
       status: 'ok',
       timestamp: new Date().toISOString(),

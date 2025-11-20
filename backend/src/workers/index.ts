@@ -11,15 +11,24 @@ let webhookQueue: Queue | null = null;
 if (process.env.NODE_ENV === 'production' || process.env.ENABLE_REDIS === 'true') {
   try {
     const redisConfig = getRedisConfig();
-    redis = new Redis({
-      ...redisConfig,
-      password: redisConfig.password ?? ''
-    });
-    
-    // Create queue if Redis is available
-    webhookQueue = new Queue('webhook-processing', {
-      connection: redis,
-    });
+
+    // Skip Redis initialization if host is localhost (not configured)
+    if (redisConfig.host === 'localhost' || redisConfig.host === '127.0.0.1') {
+      logger.warn('⚠️ Redis not configured - using fallback mode without queue');
+    } else {
+      redis = new Redis({
+        ...redisConfig,
+        password: redisConfig.password ?? '',
+        maxRetriesPerRequest: 0,
+        enableOfflineQueue: false,
+        retryStrategy: () => null, // Never retry
+      });
+
+      // Create queue if Redis is available
+      webhookQueue = new Queue('webhook-processing', {
+        connection: redis,
+      });
+    }
   } catch (error) {
     logger.warn('Redis connection failed, running without queue:', error);
   }
