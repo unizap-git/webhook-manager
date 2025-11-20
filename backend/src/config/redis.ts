@@ -23,9 +23,14 @@ export class RedisConnection {
       return this.client;
     }
 
+    // Check if Redis URL is configured and not localhost
+    const redisConfig = getRedisConfig();
+    if (redisConfig.host === 'localhost' || redisConfig.host === '127.0.0.1') {
+      logger.warn('⚠️ Redis not configured - using fallback mode');
+      return null;
+    }
+
     try {
-      const redisConfig = getRedisConfig();
-      
       const options: RedisOptions = {
         host: redisConfig.host,
         port: redisConfig.port,
@@ -33,16 +38,10 @@ export class RedisConnection {
         db: redisConfig.db,
         connectTimeout: 5000,
         lazyConnect: true,
-        maxRetriesPerRequest: 1,
+        maxRetriesPerRequest: 0,
         enableAutoPipelining: true,
-        keepAlive: 30000,
-        retryStrategy: (times) => {
-          if (times > 2) {
-            // Stop retrying after 2 attempts
-            return null;
-          }
-          return Math.min(times * 1000, 3000);
-        },
+        enableOfflineQueue: false,
+        retryStrategy: () => null, // Never retry
       };
 
       this.client = new Redis(options);
@@ -62,21 +61,17 @@ export class RedisConnection {
         logger.error('❌ Redis connection error:');
         logger.warn('⚠️ Redis unavailable - using fallback');
         this.isConnected = false;
-        // Don't throw error - just log it
+        // Immediately disconnect to prevent reconnection attempts
+        if (this.client) {
+          this.client.disconnect(false);
+        }
       });
 
       this.client.on('close', () => {
         // Redis connection closed
         this.isConnected = false;
-      });
-
-      this.client.on('reconnecting', (ms: number) => {
-        this.reconnectAttempts++;
-        // Redis reconnecting
-        
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          logger.error('❌ Max Redis reconnection attempts reached');
-          this.client?.disconnect();
+        if (this.client) {
+          this.client.disconnect();
         }
       });
 
