@@ -31,6 +31,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useProject } from '../contexts/ProjectContext';
 import { ProjectSelector } from './projects/ProjectSelector';
+import { ThemeToggle } from './ThemeToggle';
 
 const drawerWidth = 240;
 
@@ -43,7 +44,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Projects', icon: <ProjectIcon />, path: '/projects' },
-  { text: 'Vendors & Channels', icon: <WebhookIcon />, path: '/vendors' },
+  { text: 'Configurations', icon: <WebhookIcon />, path: '/vendors' },
   { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
   { text: 'Child Accounts', icon: <PeopleIcon />, path: '/child-accounts' },
 ];
@@ -127,14 +128,19 @@ const Layout: React.FC = () => {
       <CssBaseline />
       <AppBar
         position="fixed"
+        color="default"
+        elevation={1}
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          bgcolor: 'white',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         }}
       >
         <Toolbar>
           <IconButton
-            color="inherit"
+            color="default"
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
@@ -155,16 +161,19 @@ const Layout: React.FC = () => {
               />
             </Box>
           )}
-          
+
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body2">{user?.name}</Typography>
+            <Typography variant="body2" sx={{ color: 'text.primary' }}>{user?.name}</Typography>
             <IconButton
               size="large"
               edge="end"
               aria-label="account of current user"
               aria-haspopup="true"
               onClick={handleProfileMenuOpen}
-              color="inherit"
+              color="default"
             >
               <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
                 {user?.name?.charAt(0).toUpperCase()}
