@@ -85,6 +85,14 @@ export interface Project {
     messages: number;
     projectAccess: number;
   };
+  projectAccess?: Array<{
+    userId: string;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  }>;
 }
 
 export interface UserVendorChannel {

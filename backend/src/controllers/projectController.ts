@@ -100,6 +100,17 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
               projectAccess: true,
             },
           },
+          projectAccess: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
         orderBy: {
           createdAt: 'desc',
