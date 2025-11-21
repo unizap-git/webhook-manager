@@ -119,31 +119,44 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('vendor-channel');
   const [refreshing, setRefreshing] = useState(false);
+  const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
 
-  const fetchData = async (selectedPeriod: string) => {
+  const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Build query params with project filter
       const queryParams = new URLSearchParams({
         period: selectedPeriod,
       });
-      
+
       if (selectedProjectId && !isAllProjects) {
         queryParams.append('projectId', selectedProjectId);
       }
-      
+
+      // Add nocache parameter if bypassing cache
+      if (bypassCache) {
+        queryParams.append('nocache', 'true');
+      }
+
       // Fetch both vendor-channel and channel data
       const [vendorChannelResult, channelResult] = await Promise.all([
         apiCall('get', `/analytics/vendor-channel?${queryParams.toString()}`),
         apiCall('get', `/analytics/channels?${queryParams.toString()}`)
       ]);
-      
+
       const vcResult = vendorChannelResult as any;
       const cResult = channelResult as any;
-      
+
+      // Extract cache metadata from vendor-channel result (primary endpoint)
+      if (vcResult.meta) {
+        setCacheInfo(vcResult.meta);
+      } else {
+        setCacheInfo(null);
+      }
+
       const combinedData: CombinedAnalyticsData = {
         vendorChannelStats: vcResult.vendorChannelStats,
         channelStats: cResult.channelStats,
@@ -155,7 +168,7 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
         period: selectedPeriod,
         dateRange: vcResult.dateRange || cResult.dateRange,
       };
-      
+
       setData(combinedData);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to fetch analytics data');
@@ -172,7 +185,24 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchData(period);
+    await fetchData(period, true); // Bypass cache on refresh
+  };
+
+  // Format "Last updated" text
+  const getLastUpdatedText = (): string => {
+    if (!cacheInfo || !cacheInfo.cachedAt) return '';
+
+    const cachedTime = new Date(cacheInfo.cachedAt);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - cachedTime.getTime()) / (1000 * 60));
+
+    if (diffInMinutes < 1) return 'Updated just now';
+    if (diffInMinutes === 1) return 'Updated 1 minute ago';
+    if (diffInMinutes < 60) return `Updated ${diffInMinutes} minutes ago`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours === 1) return 'Updated 1 hour ago';
+    return `Updated ${diffInHours} hours ago`;
   };
 
   const handleExport = () => {
@@ -600,10 +630,17 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
     <Box>
       {/* Header with Controls */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
-        <Typography variant="h5" component="h2">
-          Communication Performance Analysis
-        </Typography>
-        
+        <Box>
+          <Typography variant="h5" component="h2">
+            Communication Performance Analysis
+          </Typography>
+          {cacheInfo && cacheInfo.cached && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {getLastUpdatedText()}
+            </Typography>
+          )}
+        </Box>
+
         <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <Button
             variant="outlined"

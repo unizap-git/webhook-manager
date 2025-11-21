@@ -17,6 +17,7 @@ import {
   Tab,
   Paper,
   TablePagination,
+  Button,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -27,6 +28,7 @@ import {
   BarChart,
   BugReport,
   Compare,
+  Refresh,
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import VendorChannelAnalytics from '../components/VendorChannelAnalytics';
@@ -83,6 +85,7 @@ const AnalyticsPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [dailyStatsPage, setDailyStatsPage] = useState(0);
   const [dailyStatsRowsPerPage, setDailyStatsRowsPerPage] = useState(10);
+  const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
 
   // Format date to DD-MM-YYYY
@@ -94,22 +97,35 @@ const AnalyticsPage: React.FC = () => {
     return `${day}-${month}-${year}`;
   };
 
-  const fetchAnalytics = async (selectedPeriod: string) => {
+  const fetchAnalytics = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Build query params with project filter
       const queryParams = new URLSearchParams({
         period: selectedPeriod,
       });
-      
+
       if (selectedProjectId && !isAllProjects) {
         queryParams.append('projectId', selectedProjectId);
       }
-      
-      const data = await apiCall<AnalyticsData>('get', `/analytics/dashboard?${queryParams.toString()}`);
-      setAnalyticsData(data);
+
+      // Add nocache parameter if bypassing cache
+      if (bypassCache) {
+        queryParams.append('nocache', 'true');
+      }
+
+      const result: any = await apiCall<AnalyticsData>('get', `/analytics/dashboard?${queryParams.toString()}`);
+
+      // Extract cache metadata if present
+      if (result.meta) {
+        setCacheInfo(result.meta);
+      } else {
+        setCacheInfo(null);
+      }
+
+      setAnalyticsData(result);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to fetch analytics data');
       console.error('Error fetching analytics:', err);
@@ -128,6 +144,23 @@ const AnalyticsPage: React.FC = () => {
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+  };
+
+  // Format "Last updated" text
+  const getLastUpdatedText = (): string => {
+    if (!cacheInfo || !cacheInfo.cachedAt) return '';
+
+    const cachedTime = new Date(cacheInfo.cachedAt);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - cachedTime.getTime()) / (1000 * 60));
+
+    if (diffInMinutes < 1) return 'Updated just now';
+    if (diffInMinutes === 1) return 'Updated 1 minute ago';
+    if (diffInMinutes < 60) return `Updated ${diffInMinutes} minutes ago`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours === 1) return 'Updated 1 hour ago';
+    return `Updated ${diffInHours} hours ago`;
   };
 
   const renderOverviewTab = () => {
@@ -412,15 +445,35 @@ const AnalyticsPage: React.FC = () => {
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Communication Analytics
-        </Typography>
-        
-        <DateRangeFilter 
-          value={period} 
-          onChange={handlePeriodChange}
-        />
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
+        <Box>
+          <Typography variant="h4" component="h1">
+            Communication Analytics
+          </Typography>
+          {tabValue === 0 && cacheInfo && cacheInfo.cached && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {getLastUpdatedText()}
+            </Typography>
+          )}
+        </Box>
+
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+          {tabValue === 0 && (
+            <Button
+              variant="outlined"
+              startIcon={<Refresh />}
+              onClick={() => fetchAnalytics(period, true)}
+              disabled={loading}
+              size="small"
+            >
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          )}
+          <DateRangeFilter
+            value={period}
+            onChange={handlePeriodChange}
+          />
+        </Box>
       </Box>
 
       <Paper sx={{ mb: 3 }}>

@@ -20,7 +20,8 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   
-  // Redis configuration
+  // Redis configuration (supports both URL and individual params)
+  REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.string().default('6379').transform((val: string) => parseInt(val, 10)),
   REDIS_PASSWORD: z.string().optional(),
@@ -83,6 +84,7 @@ export interface EnvConfig {
   JWT_REFRESH_EXPIRES_IN: string;
   
   // Redis
+  REDIS_URL?: string;
   REDIS_HOST: string;
   REDIS_PORT: number;
   REDIS_PASSWORD?: string;
@@ -128,15 +130,28 @@ export const getDatabaseUrl = (): string => {
 };
 
 // Redis configuration helper
-export const getRedisConfig = () => ({
-  host: env.REDIS_HOST,
-  port: env.REDIS_PORT,
-  password: env.REDIS_PASSWORD,
-  db: env.REDIS_DB,
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true,
-});
+export const getRedisConfig = () => {
+  // If REDIS_URL is provided, use it (takes precedence)
+  if (env.REDIS_URL) {
+    return {
+      url: env.REDIS_URL,
+      retryDelayOnFailover: 100,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    };
+  }
+
+  // Otherwise use individual parameters
+  return {
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: env.REDIS_PASSWORD,
+    db: env.REDIS_DB,
+    retryDelayOnFailover: 100,
+    maxRetriesPerRequest: 3,
+    lazyConnect: true,
+  };
+};
 
 // Vendor API configuration
 export const getVendorConfig = (vendor: string) => {

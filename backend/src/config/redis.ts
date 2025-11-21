@@ -23,28 +23,46 @@ export class RedisConnection {
       return this.client;
     }
 
-    // Check if Redis URL is configured and not localhost
+    // Get Redis configuration
     const redisConfig = getRedisConfig();
-    if (redisConfig.host === 'localhost' || redisConfig.host === '127.0.0.1') {
+
+    // Check if using URL or individual params
+    const hasUrl = 'url' in redisConfig && redisConfig.url;
+    const hasHost = 'host' in redisConfig;
+
+    // Skip if localhost (not properly configured)
+    if (!hasUrl && hasHost && (redisConfig.host === 'localhost' || redisConfig.host === '127.0.0.1')) {
       logger.warn('⚠️ Redis not configured - using fallback mode');
       return null;
     }
 
     try {
-      const options: RedisOptions = {
-        host: redisConfig.host,
-        port: redisConfig.port,
-        ...(redisConfig.password && { password: redisConfig.password }),
-        db: redisConfig.db,
-        connectTimeout: 5000,
-        lazyConnect: true,
-        maxRetriesPerRequest: 0,
-        enableAutoPipelining: true,
-        enableOfflineQueue: false,
-        retryStrategy: () => null, // Never retry
-      };
+      // Create Redis client with URL or individual params
+      if (hasUrl) {
+        this.client = new Redis(redisConfig.url!, {
+          connectTimeout: 5000,
+          lazyConnect: true,
+          maxRetriesPerRequest: 0,
+          enableAutoPipelining: true,
+          enableOfflineQueue: false,
+          retryStrategy: () => null, // Never retry
+        });
+      } else {
+        const options: RedisOptions = {
+          host: (redisConfig as any).host,
+          port: (redisConfig as any).port,
+          ...((redisConfig as any).password && { password: (redisConfig as any).password }),
+          db: (redisConfig as any).db || 0,
+          connectTimeout: 5000,
+          lazyConnect: true,
+          maxRetriesPerRequest: 0,
+          enableAutoPipelining: true,
+          enableOfflineQueue: false,
+          retryStrategy: () => null, // Never retry
+        };
 
-      this.client = new Redis(options);
+        this.client = new Redis(options);
+      }
 
       // Event handlers
       this.client.on('connect', () => {

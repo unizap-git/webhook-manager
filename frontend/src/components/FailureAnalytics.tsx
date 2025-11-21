@@ -96,6 +96,7 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [refreshing, setRefreshing] = useState(false);
   const [dailyFailuresPage, setDailyFailuresPage] = useState(0);
   const [dailyFailuresRowsPerPage, setDailyFailuresRowsPerPage] = useState(10);
+  const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
 
   // Get channel color based on channel type
@@ -107,21 +108,34 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
     return 'primary'; // Default to blue
   };
 
-  const fetchData = async (selectedPeriod: string) => {
+  const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Build query params with project filter
       const queryParams = new URLSearchParams({
         period: selectedPeriod,
       });
-      
+
       if (selectedProjectId && !isAllProjects) {
         queryParams.append('projectId', selectedProjectId);
       }
-      
-      const result = await apiCall<FailureAnalyticsData>('get', `/analytics/failures?${queryParams.toString()}`);
+
+      // Add nocache parameter if bypassing cache
+      if (bypassCache) {
+        queryParams.append('nocache', 'true');
+      }
+
+      const result: any = await apiCall<FailureAnalyticsData>('get', `/analytics/failures?${queryParams.toString()}`);
+
+      // Extract cache metadata if present
+      if (result.meta) {
+        setCacheInfo(result.meta);
+      } else {
+        setCacheInfo(null);
+      }
+
       setData(result);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Failed to fetch failure analytics');
@@ -138,7 +152,24 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchData(period);
+    await fetchData(period, true); // Bypass cache on refresh
+  };
+
+  // Format "Last updated" text
+  const getLastUpdatedText = (): string => {
+    if (!cacheInfo || !cacheInfo.cachedAt) return '';
+
+    const cachedTime = new Date(cacheInfo.cachedAt);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - cachedTime.getTime()) / (1000 * 60));
+
+    if (diffInMinutes < 1) return 'Updated just now';
+    if (diffInMinutes === 1) return 'Updated 1 minute ago';
+    if (diffInMinutes < 60) return `Updated ${diffInMinutes} minutes ago`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours === 1) return 'Updated 1 hour ago';
+    return `Updated ${diffInHours} hours ago`;
   };
 
   const handleExport = () => {
@@ -170,10 +201,17 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
-        <Typography variant="h5" component="h2">
-          Failure Analysis & Debugging
-        </Typography>
-        
+        <Box>
+          <Typography variant="h5" component="h2">
+            Failure Analysis & Debugging
+          </Typography>
+          {cacheInfo && cacheInfo.cached && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {getLastUpdatedText()}
+            </Typography>
+          )}
+        </Box>
+
         <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <Button
             variant="outlined"
