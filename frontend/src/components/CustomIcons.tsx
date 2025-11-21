@@ -137,3 +137,140 @@ export const FailedIcon: React.FC<IconProps> = ({ sx }) => (
     />
   </svg>
 );
+
+export const ProjectsIcon: React.FC<IconProps> = ({ sx }) => (
+  <svg
+    width={sx?.fontSize || 24}
+    height={sx?.fontSize || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={sx}
+  >
+    <defs>
+      <linearGradient id="projectsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#7b1fa2" />
+        <stop offset="100%" stopColor="#9c27b0" />
+      </linearGradient>
+    </defs>
+    <path
+      d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
+      fill="url(#projectsGradient)"
+      opacity="0.3"
+    />
+    <path
+      d="M7 7h10v2H7zm0 4h10v2H7zm0 4h7v2H7z"
+      fill="url(#projectsGradient)"
+    />
+    <circle cx="17" cy="17" r="1.5" fill="#ce93d8" />
+  </svg>
+);
+
+export const ChildAccountsIcon: React.FC<IconProps> = ({ sx }) => (
+  <svg
+    width={sx?.fontSize || 24}
+    height={sx?.fontSize || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={sx}
+  >
+    <defs>
+      <linearGradient id="childAccountsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#f57c00" />
+        <stop offset="100%" stopColor="#ff9800" />
+      </linearGradient>
+    </defs>
+    <circle cx="9" cy="8" r="3" fill="url(#childAccountsGradient)" />
+    <circle cx="15" cy="8" r="3" fill="url(#childAccountsGradient)" opacity="0.7" />
+    <path
+      d="M9 13c-3.3 0-6 1.3-6 3v2h12v-2c0-1.7-2.7-3-6-3z"
+      fill="url(#childAccountsGradient)"
+    />
+    <path
+      d="M15 13c-0.5 0-1 0.1-1.5 0.2C14.5 13.9 15 14.9 15 16v2h6v-2c0-1.7-2.7-3-6-3z"
+      fill="url(#childAccountsGradient)"
+      opacity="0.7"
+    />
+  </svg>
+);
+
+export const SuccessRateIcon: React.FC<IconProps> = ({ sx }) => (
+  <svg
+    width={sx?.fontSize || 24}
+    height={sx?.fontSize || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={sx}
+  >
+    <defs>
+      <linearGradient id="successGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#388e3c" />
+        <stop offset="100%" stopColor="#66bb6a" />
+      </linearGradient>
+    </defs>
+    <circle cx="12" cy="12" r="10" fill="url(#successGradient)" opacity="0.2" />
+    <circle cx="12" cy="12" r="8" stroke="url(#successGradient)" strokeWidth="2" fill="none" />
+    <path
+      d="M8 12l3 3 5-6"
+      stroke="url(#successGradient)"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="3" fill="#81c784" opacity="0.3" />
+  </svg>
+);
+
+export const DailyAverageIcon: React.FC<IconProps> = ({ sx }) => (
+  <svg
+    width={sx?.fontSize || 24}
+    height={sx?.fontSize || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={sx}
+  >
+    <defs>
+      <linearGradient id="dailyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#00838f" />
+        <stop offset="100%" stopColor="#00acc1" />
+      </linearGradient>
+    </defs>
+    <rect x="4" y="14" width="3" height="6" fill="url(#dailyGradient)" opacity="0.6" rx="1" />
+    <rect x="9" y="10" width="3" height="10" fill="url(#dailyGradient)" opacity="0.8" rx="1" />
+    <rect x="14" y="6" width="3" height="14" fill="url(#dailyGradient)" rx="1" />
+    <path
+      d="M3 18h18"
+      stroke="#00acc1"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      opacity="0.5"
+    />
+  </svg>
+);
+
+export const ConfigurationsIcon: React.FC<IconProps> = ({ sx }) => (
+  <svg
+    width={sx?.fontSize || 24}
+    height={sx?.fontSize || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={sx}
+  >
+    <defs>
+      <linearGradient id="configGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#1565c0" />
+        <stop offset="100%" stopColor="#42a5f5" />
+      </linearGradient>
+    </defs>
+    <circle cx="12" cy="12" r="3" fill="url(#configGradient)" />
+    <path
+      d="M19.4 15c-.1-.3-.1-.6-.1-1s0-.7.1-1l2.1-1.6c.2-.1.2-.4.1-.6l-2-3.5c-.1-.2-.3-.3-.6-.2l-2.5 1c-.5-.4-1.1-.7-1.7-1l-.4-2.6c0-.2-.3-.4-.5-.4h-4c-.3 0-.5.2-.5.4l-.4 2.6c-.6.2-1.1.6-1.7 1l-2.5-1c-.2-.1-.5 0-.6.2l-2 3.5c-.1.2 0 .5.1.6L4.6 13c-.1.3-.1.6-.1 1s0 .7.1 1l-2.1 1.6c-.2.1-.2.4-.1.6l2 3.5c.1.2.3.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.3.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.2 1.1-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5c.1-.2 0-.5-.1-.6L19.4 15z"
+      fill="url(#configGradient)"
+      opacity="0.3"
+    />
+  </svg>
+);

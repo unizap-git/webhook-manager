@@ -169,3 +169,74 @@ export interface ApiError {
   error: string;
   details?: any[];
 }
+
+export interface ProfileResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    accountType: 'PARENT' | 'CHILD';
+    createdAt: string;
+    updatedAt: string;
+    parent?: {
+      id: string;
+      email: string;
+      name: string;
+    };
+  };
+  stats: {
+    totalMessages: number;
+    activeConfigurations: number;
+    projectsCount: number;
+    childAccountsCount: number;
+    successRate: number;
+    avgDailyMessages: number;
+  };
+  usageTrends: Array<{
+    date: string;
+    count: number;
+  }>;
+  recentActivity: Array<{
+    id: string;
+    recipient: string;
+    vendor: string;
+    channel: string;
+    status: string;
+    timestamp: string;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    createdAt: string;
+    _count: {
+      userVendorChannels: number;
+      messages: number;
+    };
+  }>;
+  topVendors: Array<{
+    vendorId: string;
+    vendorName: string;
+    messageCount: number;
+  }>;
+  childAccounts?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    createdAt: string;
+    updatedAt: string;
+    _count: {
+      projectAccess: number;
+    };
+  }>;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  success: boolean;
+  message: string;
+}

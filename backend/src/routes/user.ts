@@ -1,12 +1,13 @@
 import { Router } from 'express';
-import { 
+import {
   getUserProfile,
   register,
   login,
   createChildAccount,
   getChildAccounts,
   resetChildPassword,
-  deleteChildAccount
+  deleteChildAccount,
+  changePassword
 } from '../controllers/userController';
 import { authenticateToken, requireParentAccount } from '../middleware/auth';
 
@@ -21,6 +22,7 @@ router.use(authenticateToken);
 
 // User profile route
 router.get('/profile', getUserProfile);
+router.post('/change-password', changePassword);
 
 // Parent-only routes
 router.post('/child-accounts', requireParentAccount, createChildAccount);
