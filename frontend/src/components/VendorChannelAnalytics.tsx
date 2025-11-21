@@ -122,10 +122,24 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
 
+  // Frontend cache to avoid re-fetching when switching tabs
+  const dataCache = React.useRef<Map<string, CombinedAnalyticsData>>(new Map());
+
   const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Generate frontend cache key based on period and project
+      const cacheKey = `${selectedPeriod}_${selectedProjectId || 'all'}`;
+
+      // Check frontend cache first (unless bypassing or refreshing)
+      if (!bypassCache && dataCache.current.has(cacheKey)) {
+        const cachedData = dataCache.current.get(cacheKey)!;
+        setData(cachedData);
+        setLoading(false);
+        return;
+      }
 
       // Build query params with project filter
       const queryParams = new URLSearchParams({
@@ -168,6 +182,9 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
         period: selectedPeriod,
         dateRange: vcResult.dateRange || cResult.dateRange,
       };
+
+      // Store in frontend cache for future tab switches
+      dataCache.current.set(cacheKey, combinedData);
 
       setData(combinedData);
     } catch (err: any) {

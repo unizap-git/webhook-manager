@@ -94,15 +94,17 @@ export const analyticsCacheMiddleware = (endpoint: string, ttlSeconds: number) =
  * Tiered TTL configuration for different endpoints
  */
 export const CACHE_TTL = {
-  dashboard: 10 * 60, // 10 minutes
+  projects: 30 * 60, // 30 minutes (rarely changes)
+  dashboard: 15 * 60, // 15 minutes (increased from 10)
   vendorChannel: 15 * 60, // 15 minutes
   channels: 15 * 60, // 15 minutes
-  failures: 20 * 60, // 20 minutes
+  failures: 10 * 60, // 10 minutes (decreased from 20 for debugging freshness)
 };
 
 /**
  * Pre-configured middleware for each analytics endpoint
  */
+export const projectsCache = analyticsCacheMiddleware('projects', CACHE_TTL.projects);
 export const dashboardCache = analyticsCacheMiddleware('dashboard', CACHE_TTL.dashboard);
 export const vendorChannelCache = analyticsCacheMiddleware('vendor-channel', CACHE_TTL.vendorChannel);
 export const channelsCache = analyticsCacheMiddleware('channels', CACHE_TTL.channels);

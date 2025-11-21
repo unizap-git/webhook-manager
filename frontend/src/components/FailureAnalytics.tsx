@@ -96,8 +96,14 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [refreshing, setRefreshing] = useState(false);
   const [dailyFailuresPage, setDailyFailuresPage] = useState(0);
   const [dailyFailuresRowsPerPage, setDailyFailuresRowsPerPage] = useState(10);
+  const [failureReasonsPage, setFailureReasonsPage] = useState(0);
+  const [failureReasonsRowsPerPage, setFailureReasonsRowsPerPage] = useState(10);
+  const [webhookExamplesPagination, setWebhookExamplesPagination] = useState<Record<string, { page: number, rowsPerPage: number }>>({});
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
+
+  // Frontend cache to avoid re-fetching when switching tabs
+  const dataCache = React.useRef<Map<string, FailureAnalyticsData>>(new Map());
 
   // Get channel color based on channel type
   const getChannelColor = (channel: string): 'primary' | 'error' | 'success' => {
@@ -108,10 +114,33 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
     return 'primary'; // Default to blue
   };
 
+  // Helper functions for webhook examples pagination
+  const getWebhookPagination = (reasonKey: string) => {
+    return webhookExamplesPagination[reasonKey] || { page: 0, rowsPerPage: 10 };
+  };
+
+  const setWebhookPagination = (reasonKey: string, page: number, rowsPerPage: number) => {
+    setWebhookExamplesPagination(prev => ({
+      ...prev,
+      [reasonKey]: { page, rowsPerPage }
+    }));
+  };
+
   const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Generate frontend cache key based on period and project
+      const cacheKey = `${selectedPeriod}_${selectedProjectId || 'all'}`;
+
+      // Check frontend cache first (unless bypassing or refreshing)
+      if (!bypassCache && dataCache.current.has(cacheKey)) {
+        const cachedData = dataCache.current.get(cacheKey)!;
+        setData(cachedData);
+        setLoading(false);
+        return;
+      }
 
       // Build query params with project filter
       const queryParams = new URLSearchParams({
@@ -135,6 +164,9 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
       } else {
         setCacheInfo(null);
       }
+
+      // Store in frontend cache for future tab switches
+      dataCache.current.set(cacheKey, result);
 
       setData(result);
     } catch (err: any) {
@@ -311,7 +343,9 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {data.failureReasons.map((reason, index) => (
+                      {data.failureReasons
+                        .slice(failureReasonsPage * failureReasonsRowsPerPage, failureReasonsPage * failureReasonsRowsPerPage + failureReasonsRowsPerPage)
+                        .map((reason, index) => (
                         <TableRow key={index}>
                           <TableCell>
                             <Typography variant="subtitle2">
@@ -320,7 +354,7 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                           </TableCell>
                           <TableCell align="right">{reason.count}</TableCell>
                           <TableCell align="right">
-                            <PerformanceChip 
+                            <PerformanceChip
                               value={reason.percentage}
                             />
                           </TableCell>
@@ -351,6 +385,18 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                     </TableBody>
                   </Table>
                 </TableContainer>
+                <TablePagination
+                  rowsPerPageOptions={[10, 25, 50]}
+                  component="div"
+                  count={data.failureReasons.length}
+                  rowsPerPage={failureReasonsRowsPerPage}
+                  page={failureReasonsPage}
+                  onPageChange={(_, newPage) => setFailureReasonsPage(newPage)}
+                  onRowsPerPageChange={(event) => {
+                    setFailureReasonsRowsPerPage(parseInt(event.target.value, 10));
+                    setFailureReasonsPage(0);
+                  }}
+                />
               </CardContent>
             </Card>
 
@@ -412,55 +458,75 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
             </Card>
 
             {/* Detailed Failure Examples */}
-            {data.failureReasons.filter(r => r.examples.length > 0).map((reason, index) => (
-              <Accordion key={index} sx={{ mb: 2 }}>
-                <AccordionSummary expandIcon={<ExpandMore />}>
-                  <Typography>
-                    {reason.reason} - Webhook Examples ({reason.count} failures)
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Raw Webhook Examples for Debugging:
-                  </Typography>
-                  {reason.examples.map((example, exampleIndex) => (
-                    <Paper key={exampleIndex} sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
-                          <Typography variant="subtitle2" color="primary">
-                            Message Details:
-                          </Typography>
-                          <Typography variant="body2">
-                            <strong>Message ID:</strong> {example.messageId}
-                          </Typography>
-                          <Typography variant="body2">
-                            <strong>Recipient:</strong> {example.recipient}
-                          </Typography>
-                          <Typography variant="body2">
-                            <strong>Timestamp:</strong> {formatDate(example.timestamp)}
-                          </Typography>
+            {data.failureReasons.filter(r => r.examples.length > 0).map((reason, index) => {
+              const pagination = getWebhookPagination(reason.reason);
+              const paginatedExamples = reason.examples.slice(
+                pagination.page * pagination.rowsPerPage,
+                pagination.page * pagination.rowsPerPage + pagination.rowsPerPage
+              );
+
+              return (
+                <Accordion key={index} sx={{ mb: 2 }}>
+                  <AccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography>
+                      {reason.reason} - Webhook Examples ({reason.examples.length} examples)
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Raw Webhook Examples for Debugging:
+                    </Typography>
+                    {paginatedExamples.map((example, exampleIndex) => (
+                      <Paper key={exampleIndex} sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="subtitle2" color="primary">
+                              Message Details:
+                            </Typography>
+                            <Typography variant="body2">
+                              <strong>Message ID:</strong> {example.messageId}
+                            </Typography>
+                            <Typography variant="body2">
+                              <strong>Recipient:</strong> {example.recipient}
+                            </Typography>
+                            <Typography variant="body2">
+                              <strong>Timestamp:</strong> {formatDate(example.timestamp)}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="subtitle2" color="secondary">
+                              Raw Webhook Payload:
+                            </Typography>
+                            <Box component="pre" sx={{
+                              fontSize: 11,
+                              bgcolor: 'grey.100',
+                              p: 1,
+                              borderRadius: 1,
+                              overflow: 'auto',
+                              maxHeight: 200
+                            }}>
+                              {JSON.stringify(example.rawPayload, null, 2)}
+                            </Box>
+                          </Grid>
                         </Grid>
-                        <Grid item xs={12} md={6}>
-                          <Typography variant="subtitle2" color="secondary">
-                            Raw Webhook Payload:
-                          </Typography>
-                          <Box component="pre" sx={{ 
-                            fontSize: 11, 
-                            bgcolor: 'grey.100', 
-                            p: 1, 
-                            borderRadius: 1, 
-                            overflow: 'auto',
-                            maxHeight: 200
-                          }}>
-                            {JSON.stringify(example.rawPayload, null, 2)}
-                          </Box>
-                        </Grid>
-                      </Grid>
-                    </Paper>
-                  ))}
-                </AccordionDetails>
-              </Accordion>
-            ))}
+                      </Paper>
+                    ))}
+                    <TablePagination
+                      rowsPerPageOptions={[10, 25, 50]}
+                      component="div"
+                      count={reason.examples.length}
+                      rowsPerPage={pagination.rowsPerPage}
+                      page={pagination.page}
+                      onPageChange={(_, newPage) => setWebhookPagination(reason.reason, newPage, pagination.rowsPerPage)}
+                      onRowsPerPageChange={(event) => {
+                        const newRowsPerPage = parseInt(event.target.value, 10);
+                        setWebhookPagination(reason.reason, 0, newRowsPerPage);
+                      }}
+                    />
+                  </AccordionDetails>
+                </Accordion>
+              );
+            })}
 
             {/* Daily Failure Trends */}
             {data.dailyFailures.length > 0 && (

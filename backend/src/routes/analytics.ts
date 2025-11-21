@@ -11,6 +11,7 @@ import {
 } from '../controllers/analyticsController';
 import { authenticateToken, getEffectiveUserId } from '../middleware/auth';
 import {
+  projectsCache,
   dashboardCache,
   vendorChannelCache,
   channelsCache,
@@ -29,9 +30,11 @@ router.get('/vendor-channel', vendorChannelCache, getVendorChannelAnalytics);
 router.get('/channels', channelsCache, getChannelAnalytics);
 router.get('/failures', failuresCache, getFailureAnalytics);
 
+// Routes with lighter caching
+router.get('/projects', projectsCache, getProjectAnalytics);
+
 // Routes without caching
 router.get('/events', getEventAnalytics);
-router.get('/projects', getProjectAnalytics);
 router.get('/debug', getDebugEventData);
 router.get('/', getAnalytics);
 

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { cacheService } from '../services/cacheService';
 
 interface AuthRequest extends Request {
   user?: {
@@ -54,6 +55,10 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
         userId,
       },
     });
+
+    // Invalidate projects cache for this user
+    await cacheService.deletePattern(`analytics:projects:${userId}:*`);
+    logger.debug(`🗑️  Cache invalidated for user ${userId} after project creation`);
 
     res.status(201).json({
       message: 'Project created successfully',

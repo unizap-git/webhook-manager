@@ -86,6 +86,7 @@ const AnalyticsPage: React.FC = () => {
   const [dailyStatsPage, setDailyStatsPage] = useState(0);
   const [dailyStatsRowsPerPage, setDailyStatsRowsPerPage] = useState(10);
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
+  const [isInitialMount, setIsInitialMount] = useState(true);
   const { selectedProjectId, isAllProjects } = useProject();
 
   // Format date to DD-MM-YYYY
@@ -135,8 +136,24 @@ const AnalyticsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // Skip initial mount to prevent double fetch
+    // (ProjectContext loads selectedProjectId from localStorage asynchronously)
+    if (isInitialMount) {
+      setIsInitialMount(false);
+      return;
+    }
+
     fetchAnalytics(period);
   }, [period, selectedProjectId]); // Re-fetch when project changes
+
+  // Fetch on initial mount after a small delay to let projectId load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchAnalytics(period);
+    }, 100); // 100ms delay to let localStorage load
+
+    return () => clearTimeout(timer);
+  }, []); // Run only once on mount
 
   const handlePeriodChange = (newPeriod: string) => {
     setPeriod(newPeriod);
