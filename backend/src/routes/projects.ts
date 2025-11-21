@@ -6,6 +6,7 @@ import {
   updateProject,
   deleteProject,
   grantProjectAccess,
+  batchGrantProjectAccess,
   revokeProjectAccess,
   getProjectAccessList,
 } from '../controllers/projectController';
@@ -25,6 +26,7 @@ router.delete('/:id', deleteProject);
 
 // Project access management routes
 router.post('/access', grantProjectAccess);
+router.post('/batch-access', batchGrantProjectAccess);
 router.post('/:projectId/access', grantProjectAccess);
 router.delete('/:projectId/access/:childUserId', revokeProjectAccess);
 router.get('/:projectId/access', getProjectAccessList);

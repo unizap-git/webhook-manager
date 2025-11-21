@@ -276,7 +276,7 @@ export const getChildAccounts = async (req: AuthRequest, res: Response, next: Ne
       return;
     }
 
-    // Get child accounts
+    // Get child accounts with project access information
     const childAccounts = await prisma.user.findMany({
       where: {
         ...(parentId ? { parentId } : {})
@@ -286,7 +286,19 @@ export const getChildAccounts = async (req: AuthRequest, res: Response, next: Ne
         email: true,
         name: true,
         accountType: true,
-        createdAt: true
+        createdAt: true,
+        projectAccess: {
+          select: {
+            projectId: true,
+            accessType: true,
+            project: {
+              select: {
+                id: true,
+                name: true,
+              }
+            }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });

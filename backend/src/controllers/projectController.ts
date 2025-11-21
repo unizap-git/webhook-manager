@@ -308,6 +308,98 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+// Batch grant project access to child account for multiple projects
+export const batchGrantProjectAccess = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { childUserId, projectIds, accessType = 'specific' } = req.body;
+    const parentUserId = req.user?.userId;
+
+    if (!parentUserId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    if (!childUserId) {
+      res.status(400).json({ error: 'Child User ID is required' });
+      return;
+    }
+
+    if (!projectIds || !Array.isArray(projectIds) || projectIds.length === 0) {
+      res.status(400).json({ error: 'Project IDs array is required' });
+      return;
+    }
+
+    // Validate access type
+    if (!['specific', 'all'].includes(accessType)) {
+      res.status(400).json({ error: 'Invalid access type' });
+      return;
+    }
+
+    // Verify child account relationship
+    const childUser = await prisma.user.findFirst({
+      where: {
+        id: childUserId,
+        parentId: parentUserId,
+        accountType: 'CHILD',
+      },
+    });
+
+    if (!childUser) {
+      res.status(404).json({ error: 'Child account not found' });
+      return;
+    }
+
+    // Verify all projects belong to parent
+    const projects = await prisma.project.findMany({
+      where: {
+        id: { in: projectIds },
+        userId: parentUserId,
+      },
+    });
+
+    if (projects.length !== projectIds.length) {
+      res.status(404).json({ error: 'One or more projects not found or access denied' });
+      return;
+    }
+
+    // Batch create or update access records
+    const accessRecords = await Promise.all(
+      projectIds.map(async (projectId) => {
+        const existingAccess = await prisma.projectAccess.findFirst({
+          where: {
+            projectId,
+            userId: childUserId,
+          },
+        });
+
+        if (existingAccess) {
+          return await prisma.projectAccess.update({
+            where: { id: existingAccess.id },
+            data: { accessType },
+          });
+        } else {
+          return await prisma.projectAccess.create({
+            data: {
+              projectId,
+              userId: childUserId,
+              accessType,
+              grantedBy: parentUserId,
+            },
+          });
+        }
+      })
+    );
+
+    res.json({
+      message: `Project access granted successfully for ${accessRecords.length} project(s)`,
+      projectAccess: accessRecords,
+    });
+  } catch (error) {
+    logger.error('Failed to batch grant project access:', error);
+    res.status(500).json({ error: 'Failed to batch grant project access' });
+  }
+};
+
 // Grant project access to child account
 export const grantProjectAccess = async (req: Request, res: Response): Promise<void> => {
   try {

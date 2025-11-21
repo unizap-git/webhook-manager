@@ -37,6 +37,7 @@ import {
   Key as KeyIcon,
   ContentCopy as CopyIcon,
   Business as ProjectIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -44,12 +45,13 @@ import { z } from 'zod';
 import { useSnackbar } from 'notistack';
 
 import { apiCall } from '../api/client';
-import { 
-  ChildAccount, 
-  CreateChildAccountResponse, 
+import {
+  ChildAccount,
+  CreateChildAccountResponse,
   GetChildAccountsResponse,
   Project
 } from '../types/api';
+import { LRUCache } from '../utils/lruCache';
 
 interface CreateChildFormData {
   email: string;
@@ -74,8 +76,26 @@ const ChildAccountsPage: React.FC = () => {
   const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false);
   const [resetChildId, setResetChildId] = useState<string>('');
   const [resetConfirmText, setResetConfirmText] = useState('');
-  
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [deleteChildId, setDeleteChildId] = useState<string>('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [showManageAccessDialog, setShowManageAccessDialog] = useState(false);
+  const [manageAccessChildId, setManageAccessChildId] = useState<string>('');
+  const [manageAccessProjects, setManageAccessProjects] = useState<string[]>([]);
+
+  // LRU caches to prevent memory leaks (max 20 entries each)
+  const childAccountsCache = React.useRef<LRUCache<string, ChildAccount[]>>(new LRUCache(20));
+  const projectsCache = React.useRef<LRUCache<string, Project[]>>(new LRUCache(20));
+
   const { enqueueSnackbar } = useSnackbar();
+
+  // Clear caches on unmount
+  useEffect(() => {
+    return () => {
+      childAccountsCache.current.clear();
+      projectsCache.current.clear();
+    };
+  }, []);
 
   const {
     register,
@@ -99,29 +119,52 @@ const ChildAccountsPage: React.FC = () => {
     setValue('projectIds', selectedProjects);
   }, [selectedProjects, setValue]);
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (bypassCache = false) => {
     try {
+      const cacheKey = 'projects';
+
+      // Check cache first (unless bypassing)
+      if (!bypassCache && projectsCache.current.has(cacheKey)) {
+        const cachedProjects = projectsCache.current.get(cacheKey)!;
+        setProjects(cachedProjects);
+        return;
+      }
+
       const response = await apiCall<{ projects: Project[] }>('get', '/projects');
-      setProjects(response.projects || []);
+      const fetchedProjects = response.projects || [];
+
+      // Store in cache
+      projectsCache.current.set(cacheKey, fetchedProjects);
+      setProjects(fetchedProjects);
     } catch (error: any) {
-      enqueueSnackbar(error.response?.data?.error || 'Failed to fetch projects', { 
-        variant: 'error' 
+      enqueueSnackbar(error.response?.data?.error || 'Failed to fetch projects', {
+        variant: 'error'
       });
     }
   };
 
-  useEffect(() => {
-    setValue('projectIds', selectedProjects);
-  }, [selectedProjects, setValue]);
-
-  const fetchChildAccounts = async () => {
+  const fetchChildAccounts = async (bypassCache = false) => {
     try {
       setIsLoading(true);
+      const cacheKey = 'childAccounts';
+
+      // Check cache first (unless bypassing)
+      if (!bypassCache && childAccountsCache.current.has(cacheKey)) {
+        const cachedAccounts = childAccountsCache.current.get(cacheKey)!;
+        setChildAccounts(cachedAccounts);
+        setIsLoading(false);
+        return;
+      }
+
       const response = await apiCall<GetChildAccountsResponse>('get', '/user/child-accounts');
-      setChildAccounts(response.childAccounts);
+      const fetchedAccounts = response.childAccounts;
+
+      // Store in cache
+      childAccountsCache.current.set(cacheKey, fetchedAccounts);
+      setChildAccounts(fetchedAccounts);
     } catch (error: any) {
-      enqueueSnackbar(error.response?.data?.error || 'Failed to fetch child accounts', { 
-        variant: 'error' 
+      enqueueSnackbar(error.response?.data?.error || 'Failed to fetch child accounts', {
+        variant: 'error'
       });
     } finally {
       setIsLoading(false);
@@ -131,53 +174,61 @@ const ChildAccountsPage: React.FC = () => {
   const handleCreateChild = async (data: CreateChildFormData) => {
     try {
       setIsLoading(true);
-      
+
       // Create the child account
       const response = await apiCall<CreateChildAccountResponse>('post', '/user/child-accounts', {
         email: data.email,
         name: data.name,
       });
-      
-      // Grant access to selected projects
+
+      // Grant access to selected projects using batch endpoint (single API call)
       if (data.projectIds && data.projectIds.length > 0) {
-        for (const projectId of data.projectIds) {
-          await apiCall('post', `/projects/${projectId}/access`, {
-            childUserId: response.childAccount.id,
-          });
-        }
+        await apiCall('post', '/projects/batch-access', {
+          childUserId: response.childAccount.id,
+          projectIds: data.projectIds,
+        });
       }
-      
+
       setNewChildPassword(response.childAccount.password || '');
       setShowPasswordDialog(true);
       setIsCreateDialogOpen(false);
       setSelectedProjects([]);
       reset();
-      
-      // Refresh the list
-      await fetchChildAccounts();
-      
+
+      // Refresh the list (bypass cache to get fresh data)
+      await fetchChildAccounts(true);
+
       enqueueSnackbar(`Child account created with access to ${data.projectIds.length} project(s)`, { variant: 'success' });
     } catch (error: any) {
-      enqueueSnackbar(error.response?.data?.error || 'Failed to create child account', { 
-        variant: 'error' 
+      enqueueSnackbar(error.response?.data?.error || 'Failed to create child account', {
+        variant: 'error'
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeleteChild = async (childId: string) => {
-    if (!window.confirm('Are you sure you want to delete this child account?')) {
+  const handleDeleteChild = (childId: string) => {
+    setDeleteChildId(childId);
+    setDeleteConfirmText('');
+    setShowDeleteConfirmDialog(true);
+  };
+
+  const handleConfirmDeleteChild = async () => {
+    if (deleteConfirmText.toLowerCase() !== 'delete account') {
+      enqueueSnackbar('Please type "delete account" to confirm', { variant: 'error' });
       return;
     }
 
     try {
-      await apiCall('delete', `/user/child-accounts/${childId}`);
-      await fetchChildAccounts();
+      await apiCall('delete', `/user/child-accounts/${deleteChildId}`);
+      await fetchChildAccounts(true);
+      setShowDeleteConfirmDialog(false);
+      setDeleteConfirmText('');
       enqueueSnackbar('Child account deleted successfully', { variant: 'success' });
     } catch (error: any) {
-      enqueueSnackbar(error.response?.data?.error || 'Failed to delete child account', { 
-        variant: 'error' 
+      enqueueSnackbar(error.response?.data?.error || 'Failed to delete child account', {
+        variant: 'error'
       });
     }
   };
@@ -217,11 +268,60 @@ const ChildAccountsPage: React.FC = () => {
     }
   };
 
+  const handleManageAccess = (child: ChildAccount) => {
+    setManageAccessChildId(child.id);
+    const currentProjectIds = child.projectAccess?.map(pa => pa.projectId) || [];
+    setManageAccessProjects(currentProjectIds);
+    setShowManageAccessDialog(true);
+  };
+
+  const handleSaveManageAccess = async () => {
+    try {
+      setIsLoading(true);
+
+      // Use batch endpoint to update all project access at once
+      if (manageAccessProjects.length > 0) {
+        await apiCall('post', '/projects/batch-access', {
+          childUserId: manageAccessChildId,
+          projectIds: manageAccessProjects,
+        });
+      }
+
+      // Remove access from projects that were deselected
+      const child = childAccounts.find(c => c.id === manageAccessChildId);
+      const currentProjectIds = child?.projectAccess?.map(pa => pa.projectId) || [];
+      const removedProjects = currentProjectIds.filter(id => !manageAccessProjects.includes(id));
+
+      for (const projectId of removedProjects) {
+        await apiCall('delete', `/projects/${projectId}/access/${manageAccessChildId}`);
+      }
+
+      setShowManageAccessDialog(false);
+      setManageAccessProjects([]);
+      await fetchChildAccounts(true);
+      enqueueSnackbar('Project access updated successfully', { variant: 'success' });
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.error || 'Failed to update project access', {
+        variant: 'error'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSelectAllProjects = () => {
     if (selectedProjects.length === projects.length) {
       setSelectedProjects([]);
     } else {
       setSelectedProjects(projects.map(p => p.id));
+    }
+  };
+
+  const handleSelectAllManageProjects = () => {
+    if (manageAccessProjects.length === projects.length) {
+      setManageAccessProjects([]);
+    } else {
+      setManageAccessProjects(projects.map(p => p.id));
     }
   };
 
@@ -245,7 +345,10 @@ const ChildAccountsPage: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
-            onClick={fetchChildAccounts}
+            onClick={() => {
+              fetchChildAccounts(true);
+              fetchProjects(true);
+            }}
             disabled={isLoading}
           >
             Refresh
@@ -284,6 +387,7 @@ const ChildAccountsPage: React.FC = () => {
                   <TableRow>
                     <TableCell>Email</TableCell>
                     <TableCell>Name</TableCell>
+                    <TableCell>Project Access</TableCell>
                     <TableCell>Created</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell align="right">Actions</TableCell>
@@ -294,17 +398,45 @@ const ChildAccountsPage: React.FC = () => {
                     <TableRow key={child.id}>
                       <TableCell>{child.email}</TableCell>
                       <TableCell>{child.name || '-'}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {child.projectAccess && child.projectAccess.length > 0 ? (
+                            child.projectAccess.map((pa) => (
+                              <Chip
+                                key={pa.projectId}
+                                label={pa.project.name}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              No access
+                            </Typography>
+                          )}
+                        </Box>
+                      </TableCell>
                       <TableCell>{formatDate(child.createdAt)}</TableCell>
                       <TableCell>
-                        <Chip 
-                          label="Active" 
-                          color="success" 
-                          size="small" 
+                        <Chip
+                          label="Active"
+                          color="success"
+                          size="small"
                         />
                       </TableCell>
                       <TableCell align="right">
+                        <Tooltip title="Manage Project Access">
+                          <IconButton
+                            onClick={() => handleManageAccess(child)}
+                            size="small"
+                            color="info"
+                          >
+                            <ManageAccountsIcon />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Reset Password">
-                          <IconButton 
+                          <IconButton
                             onClick={() => handleResetPassword(child.id)}
                             size="small"
                             color="primary"
@@ -313,7 +445,7 @@ const ChildAccountsPage: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Delete Account">
-                          <IconButton 
+                          <IconButton
                             onClick={() => handleDeleteChild(child.id)}
                             size="small"
                             color="error"
@@ -512,8 +644,8 @@ const ChildAccountsPage: React.FC = () => {
       </Dialog>
 
       {/* Password Display Dialog */}
-      <Dialog 
-        open={showPasswordDialog} 
+      <Dialog
+        open={showPasswordDialog}
         onClose={() => setShowPasswordDialog(false)}
         maxWidth="sm"
         fullWidth
@@ -523,12 +655,12 @@ const ChildAccountsPage: React.FC = () => {
           <Alert severity="warning" sx={{ mb: 2 }}>
             Please save this password securely. It will not be shown again.
           </Alert>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 1, 
-            p: 2, 
-            bgcolor: 'grey.100', 
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            p: 2,
+            bgcolor: 'grey.100',
             borderRadius: 1,
             fontFamily: 'monospace',
             fontSize: '1.1rem'
@@ -542,11 +674,147 @@ const ChildAccountsPage: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => setShowPasswordDialog(false)}
             variant="contained"
           >
             I've Saved the Password
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Account Confirmation Dialog */}
+      <Dialog
+        open={showDeleteConfirmDialog}
+        onClose={() => {
+          setShowDeleteConfirmDialog(false);
+          setDeleteConfirmText('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Account Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Are you sure you want to delete this child account? This action cannot be undone.
+            All project access will be revoked.
+          </DialogContentText>
+          <DialogContentText sx={{ mb: 2, fontWeight: 'bold' }}>
+            Please type "delete account" to confirm:
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Type 'delete account' to confirm"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setShowDeleteConfirmDialog(false);
+              setDeleteConfirmText('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDeleteChild}
+            variant="contained"
+            color="error"
+            disabled={deleteConfirmText.toLowerCase() !== 'delete account'}
+          >
+            Delete Account
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Manage Project Access Dialog */}
+      <Dialog
+        open={showManageAccessDialog}
+        onClose={() => {
+          setShowManageAccessDialog(false);
+          setManageAccessProjects([]);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Manage Project Access</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Select which projects this child account can access.
+          </DialogContentText>
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="manage-access-label">
+              <Box display="flex" alignItems="center">
+                <ProjectIcon sx={{ mr: 0.5 }} fontSize="small" />
+                Select Projects
+              </Box>
+            </InputLabel>
+            <Select
+              labelId="manage-access-label"
+              multiple
+              value={manageAccessProjects}
+              onChange={(e) => setManageAccessProjects(e.target.value as string[])}
+              label={
+                <Box display="flex" alignItems="center">
+                  <ProjectIcon sx={{ mr: 0.5 }} fontSize="small" />
+                  Select Projects
+                </Box>
+              }
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {(selected as string[]).map((value) => {
+                    const project = projects.find(p => p.id === value);
+                    return (
+                      <Chip key={value} label={project?.name || value} size="small" />
+                    );
+                  })}
+                </Box>
+              )}
+            >
+              <MenuItem>
+                <Checkbox
+                  checked={manageAccessProjects.length === projects.length && projects.length > 0}
+                  indeterminate={manageAccessProjects.length > 0 && manageAccessProjects.length < projects.length}
+                  onChange={handleSelectAllManageProjects}
+                />
+                <ListItemText primary="Select All" />
+              </MenuItem>
+              {projects.map((project) => (
+                <MenuItem key={project.id} value={project.id}>
+                  <Checkbox checked={manageAccessProjects.includes(project.id)} />
+                  <ListItemText
+                    primary={project.name}
+                    secondary={project.description}
+                  />
+                </MenuItem>
+              ))}
+            </Select>
+            {manageAccessProjects.length > 0 && (
+              <FormHelperText>
+                {manageAccessProjects.length} project(s) selected
+              </FormHelperText>
+            )}
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setShowManageAccessDialog(false);
+              setManageAccessProjects([]);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveManageAccess}
+            variant="contained"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Saving...' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

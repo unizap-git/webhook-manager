@@ -20,6 +20,14 @@ export interface ChildAccount {
   accountType: 'CHILD';
   createdAt: string;
   password?: string; // Only included when creating new child account
+  projectAccess?: Array<{
+    projectId: string;
+    accessType: string;
+    project: {
+      id: string;
+      name: string;
+    };
+  }>;
 }
 
 export interface LoginResponse {
