@@ -32,6 +32,7 @@ import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
 import { useProject } from '../contexts/ProjectContext';
 import { formatPercentage, formatDate, PerformanceChip } from '../utils/analyticsUtils';
+import { LRUCache } from '../utils/lruCache';
 
 interface FailureExample {
   messageId: string;
@@ -98,12 +99,21 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [dailyFailuresRowsPerPage, setDailyFailuresRowsPerPage] = useState(10);
   const [failureReasonsPage, setFailureReasonsPage] = useState(0);
   const [failureReasonsRowsPerPage, setFailureReasonsRowsPerPage] = useState(10);
+  const [vendorChannelFailuresPage, setVendorChannelFailuresPage] = useState(0);
+  const [vendorChannelFailuresRowsPerPage, setVendorChannelFailuresRowsPerPage] = useState(10);
   const [webhookExamplesPagination, setWebhookExamplesPagination] = useState<Record<string, { page: number, rowsPerPage: number }>>({});
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
   const { selectedProjectId, isAllProjects } = useProject();
 
-  // Frontend cache to avoid re-fetching when switching tabs
-  const dataCache = React.useRef<Map<string, FailureAnalyticsData>>(new Map());
+  // Frontend cache to avoid re-fetching when switching tabs (LRU with max 20 entries)
+  const dataCache = React.useRef<LRUCache<string, FailureAnalyticsData>>(new LRUCache(20));
+
+  // Clear cache on unmount to free memory
+  useEffect(() => {
+    return () => {
+      dataCache.current.clear();
+    };
+  }, []);
 
   // Get channel color based on channel type
   const getChannelColor = (channel: string): 'primary' | 'error' | 'success' => {
@@ -417,7 +427,9 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {data.vendorChannelFailures.map((vcFailure, index) => (
+                      {data.vendorChannelFailures
+                        .slice(vendorChannelFailuresPage * vendorChannelFailuresRowsPerPage, vendorChannelFailuresPage * vendorChannelFailuresRowsPerPage + vendorChannelFailuresRowsPerPage)
+                        .map((vcFailure, index) => (
                         <TableRow key={index}>
                           <TableCell>
                             <Typography variant="subtitle2">
@@ -454,6 +466,18 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
                     </TableBody>
                   </Table>
                 </TableContainer>
+                <TablePagination
+                  rowsPerPageOptions={[10, 25, 50]}
+                  component="div"
+                  count={data.vendorChannelFailures.length}
+                  rowsPerPage={vendorChannelFailuresRowsPerPage}
+                  page={vendorChannelFailuresPage}
+                  onPageChange={(_, newPage) => setVendorChannelFailuresPage(newPage)}
+                  onRowsPerPageChange={(event) => {
+                    setVendorChannelFailuresRowsPerPage(parseInt(event.target.value, 10));
+                    setVendorChannelFailuresPage(0);
+                  }}
+                />
               </CardContent>
             </Card>
 

@@ -23,6 +23,7 @@ import {
   LinearProgress,
   Button,
   Divider,
+  TablePagination,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -37,12 +38,13 @@ import {
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
-import { 
-  formatPercentage, 
+import {
+  formatPercentage,
   formatDate,
-  PerformanceChip 
+  PerformanceChip
 } from '../utils/analyticsUtils';
 import { useProject } from '../contexts/ProjectContext';
+import { LRUCache } from '../utils/lruCache';
 
 interface VendorChannelStat {
   vendor: string;
@@ -120,10 +122,20 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
   const [viewMode, setViewMode] = useState<ViewMode>('vendor-channel');
   const [refreshing, setRefreshing] = useState(false);
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
+  const [vendorChannelMatrixPage, setVendorChannelMatrixPage] = useState(0);
+  const [vendorChannelMatrixRowsPerPage, setVendorChannelMatrixRowsPerPage] = useState(10);
+  const [vendorPerformancePagination, setVendorPerformancePagination] = useState<Record<string, { page: number, rowsPerPage: number }>>({});
   const { selectedProjectId, isAllProjects } = useProject();
 
-  // Frontend cache to avoid re-fetching when switching tabs
-  const dataCache = React.useRef<Map<string, CombinedAnalyticsData>>(new Map());
+  // Frontend cache to avoid re-fetching when switching tabs (LRU with max 20 entries)
+  const dataCache = React.useRef<LRUCache<string, CombinedAnalyticsData>>(new LRUCache(20));
+
+  // Clear cache on unmount to free memory
+  useEffect(() => {
+    return () => {
+      dataCache.current.clear();
+    };
+  }, []);
 
   const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
     try {
@@ -224,9 +236,9 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
 
   const handleExport = () => {
     if (!data) return;
-    
+
     // Create CSV data
-    const csvData = viewMode === 'vendor-channel' 
+    const csvData = viewMode === 'vendor-channel'
       ? data.vendorChannelStats.map(stat => ({
           Vendor: stat.vendor,
           Channel: stat.channel,
@@ -262,6 +274,18 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
     a.download = `${viewMode}-analytics-${period}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Helper functions for vendor performance pagination in accordions
+  const getVendorPagination = (channelKey: string) => {
+    return vendorPerformancePagination[channelKey] || { page: 0, rowsPerPage: 10 };
+  };
+
+  const setVendorPagination = (channelKey: string, page: number, rowsPerPage: number) => {
+    setVendorPerformancePagination(prev => ({
+      ...prev,
+      [channelKey]: { page, rowsPerPage }
+    }));
   };
 
   const getChannelIcon = (channel: string) => {
@@ -312,7 +336,9 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.vendorChannelStats.map((stat, index) => (
+                  {data.vendorChannelStats
+                    .slice(vendorChannelMatrixPage * vendorChannelMatrixRowsPerPage, vendorChannelMatrixPage * vendorChannelMatrixRowsPerPage + vendorChannelMatrixRowsPerPage)
+                    .map((stat, index) => (
                     <TableRow key={index}>
                       <TableCell>
                         <Typography variant="subtitle2">
@@ -322,8 +348,8 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                       <TableCell>
                         <Box display="flex" alignItems="center">
                           {getChannelIcon(stat.channel)}
-                          <Chip 
-                            label={stat.channel.toUpperCase()} 
+                          <Chip
+                            label={stat.channel.toUpperCase()}
                             size="small"
                             color={
                               stat.channel.toLowerCase() === 'sms' ? 'primary' :
@@ -349,6 +375,18 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
                 </TableBody>
               </Table>
             </TableContainer>
+            <TablePagination
+              rowsPerPageOptions={[10, 25, 50]}
+              component="div"
+              count={data.vendorChannelStats.length}
+              rowsPerPage={vendorChannelMatrixRowsPerPage}
+              page={vendorChannelMatrixPage}
+              onPageChange={(_, newPage) => setVendorChannelMatrixPage(newPage)}
+              onRowsPerPageChange={(event) => {
+                setVendorChannelMatrixRowsPerPage(parseInt(event.target.value, 10));
+                setVendorChannelMatrixPage(0);
+              }}
+            />
           </CardContent>
         </Card>
 
@@ -535,43 +573,62 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
         </Grid>
 
         {/* Detailed Channel Analysis */}
-        {data.channelStats.map((channel, index) => (
-          <Accordion key={index} sx={{ mb: 2 }}>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Typography>
-                {channel.channel.toUpperCase()} - Detailed Analysis ({channel.totalMessages} messages)
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={3}>
-                {/* Vendor Performance */}
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Vendor Performance
-                  </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                        <TableCell>Vendor</TableCell>
-                        <TableCell align="right">Messages</TableCell>
-                        <TableCell align="center">Success Rate</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {channel.vendors.map((vendor, vendorIndex) => (
-                          <TableRow key={vendorIndex}>
-                          <TableCell>{vendor.vendor}</TableCell>
-                          <TableCell align="right">{vendor.total}</TableCell>
-                          <TableCell align="center" sx={{ textAlign: 'center' }}>
-                            <PerformanceChip value={vendor.successRate} />
-                          </TableCell>
+        {data.channelStats.map((channel, index) => {
+          const pagination = getVendorPagination(channel.channel);
+          const paginatedVendors = channel.vendors.slice(
+            pagination.page * pagination.rowsPerPage,
+            pagination.page * pagination.rowsPerPage + pagination.rowsPerPage
+          );
+
+          return (
+            <Accordion key={index} sx={{ mb: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography>
+                  {channel.channel.toUpperCase()} - Detailed Analysis ({channel.totalMessages} messages)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Grid container spacing={3}>
+                  {/* Vendor Performance */}
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Vendor Performance
+                    </Typography>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                          <TableCell>Vendor</TableCell>
+                          <TableCell align="right">Messages</TableCell>
+                          <TableCell align="center">Success Rate</TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Grid>
+                        </TableHead>
+                        <TableBody>
+                          {paginatedVendors.map((vendor, vendorIndex) => (
+                            <TableRow key={vendorIndex}>
+                            <TableCell>{vendor.vendor}</TableCell>
+                            <TableCell align="right">{vendor.total}</TableCell>
+                            <TableCell align="center" sx={{ textAlign: 'center' }}>
+                              <PerformanceChip value={vendor.successRate} />
+                            </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <TablePagination
+                      rowsPerPageOptions={[10, 25, 50]}
+                      component="div"
+                      count={channel.vendors.length}
+                      rowsPerPage={pagination.rowsPerPage}
+                      page={pagination.page}
+                      onPageChange={(_, newPage) => setVendorPagination(channel.channel, newPage, pagination.rowsPerPage)}
+                      onRowsPerPageChange={(event) => {
+                        const newRowsPerPage = parseInt(event.target.value, 10);
+                        setVendorPagination(channel.channel, 0, newRowsPerPage);
+                      }}
+                    />
+                  </Grid>
 
                 {/* Failure Reasons */}
                 <Grid item xs={12} md={6}>
@@ -638,7 +695,8 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
               </Grid>
             </AccordionDetails>
           </Accordion>
-        ))}
+          );
+        })}
       </>
     );
   };
