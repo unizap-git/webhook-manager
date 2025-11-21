@@ -89,7 +89,7 @@ const Layout: React.FC = () => {
         <Box display="flex" alignItems="center" gap={2}>
           <WebhookIcon color="primary" />
           <Typography variant="h6" noWrap component="div" color="primary">
-            Analytics
+            WebHook Hub
           </Typography>
         </Box>
       </Toolbar>
@@ -143,7 +143,6 @@ const Layout: React.FC = () => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Communication Analytics
           </Typography>
           
           {/* Project Selector - show only on analytics, dashboard and projects pages */}

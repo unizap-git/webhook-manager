@@ -30,10 +30,14 @@ export class CacheService {
     endpoint: string,
     userId: string,
     projectId: string | null | undefined,
-    period: string
+    period: string,
+    vendorId?: string | null,
+    channelId?: string | null
   ): string {
     const project = projectId === 'all' || !projectId ? 'all' : projectId;
-    return `analytics:${endpoint}:${userId}:${project}:${period}`;
+    const vendor = vendorId && vendorId !== 'all' ? vendorId : 'all';
+    const channel = channelId && channelId !== 'all' ? channelId : 'all';
+    return `analytics:${endpoint}:${userId}:${project}:${period}:${vendor}:${channel}`;
   }
 
   /**

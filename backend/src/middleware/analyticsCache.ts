@@ -16,7 +16,7 @@ export const analyticsCacheMiddleware = (endpoint: string, ttlSeconds: number) =
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.effectiveUserId || req.userId;
-      const { period = '7d', projectId, nocache } = req.query;
+      const { period = '7d', projectId, vendorId, channelId, nocache } = req.query;
 
       // Skip cache if:
       // 1. nocache query parameter is present (Refresh button)
@@ -29,12 +29,14 @@ export const analyticsCacheMiddleware = (endpoint: string, ttlSeconds: number) =
         return next();
       }
 
-      // Generate cache key
+      // Generate cache key with all filter parameters
       const cacheKey = cacheService.generateCacheKey(
         endpoint,
         userId,
         projectId as string,
-        period as string
+        period as string,
+        vendorId as string,
+        channelId as string
       );
 
       // Try to get cached data

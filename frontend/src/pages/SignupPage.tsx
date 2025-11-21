@@ -96,9 +96,6 @@ const SignupPage: React.FC = () => {
           <WebhookIcon
             sx={{ fontSize: 48, color: 'primary.main', mb: 2 }}
           />
-          <Typography variant="h4" component="h1" gutterBottom>
-            Communication Analytics
-          </Typography>
           <Typography variant="body1" color="text.secondary">
             Track your communication success rates
           </Typography>

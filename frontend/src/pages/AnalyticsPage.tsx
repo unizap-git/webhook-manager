@@ -464,9 +464,6 @@ const AnalyticsPage: React.FC = () => {
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
         <Box>
-          <Typography variant="h4" component="h1">
-            Communication Analytics
-          </Typography>
           {tabValue === 0 && cacheInfo && cacheInfo.cached && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
               {getLastUpdatedText()}
