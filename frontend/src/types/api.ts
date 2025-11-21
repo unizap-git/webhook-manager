@@ -97,6 +97,10 @@ export interface UserVendorChannel {
   createdAt: string;
   vendor: Vendor;
   channel: Channel;
+  project?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface Message {
