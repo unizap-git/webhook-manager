@@ -623,11 +623,12 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       return;
     }
 
-    const { period = '7d', startDate, endDate, projectId } = req.query;
+    const { period = '7d', startDate, endDate, projectId, limit = '50000' } = req.query;
+    const maxEvents = Math.min(parseInt(limit as string) || 50000, 100000); // Cap at 100k events
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
-    
+
     if (startDate && endDate) {
       startDate_calc = new Date(startDate as string);
       endDate_calc = new Date(endDate as string);
@@ -650,22 +651,28 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       messageWhereClause.projectId = projectId as string;
     }
 
-    // Get all message events with their raw payloads
+    // Optimized query: select only needed fields, add limit
     const messageEvents = await prisma.messageEvent.findMany({
       where: {
         message: messageWhereClause,
       },
-      include: {
+      select: {
+        messageId: true,
+        status: true,
+        reason: true,
+        timestamp: true,
+        rawPayload: true,
         message: {
-          include: {
-            vendor: true,
-            channel: true,
+          select: {
+            vendor: { select: { name: true } },
+            channel: { select: { type: true } },
           },
         },
       },
       orderBy: {
         timestamp: 'desc',
       },
+      take: maxEvents,
     });
 
     // First, get the latest event for each unique message
@@ -768,6 +775,9 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
     const vendorChannelArray = Object.values(vendorChannelStats)
       .sort((a: any, b: any) => b.totalMessages - a.totalMessages);
 
+    const totalEventsProcessed = messageEvents.length;
+    const isLimitReached = totalEventsProcessed >= maxEvents;
+
     res.json({
       vendorChannelStats: vendorChannelArray,
       period,
@@ -778,6 +788,8 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       summary: {
         totalVendorChannelCombinations: vendorChannelArray.length,
         totalMessages: vendorChannelArray.reduce((sum: number, vc: any) => sum + vc.totalMessages, 0),
+        eventsProcessed: totalEventsProcessed,
+        limitReached: isLimitReached,
       },
     });
   } catch (error) {
@@ -795,11 +807,12 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       return;
     }
 
-    const { period = '7d', startDate, endDate, projectId } = req.query;
+    const { period = '7d', startDate, endDate, projectId, limit = '50000' } = req.query;
+    const maxEvents = Math.min(parseInt(limit as string) || 50000, 100000); // Cap at 100k events
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
-    
+
     if (startDate && endDate) {
       startDate_calc = new Date(startDate as string);
       endDate_calc = new Date(endDate as string);
@@ -822,19 +835,28 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       messageWhereClause.projectId = projectId as string;
     }
 
-    // Get all message events grouped by channel
+    // Optimized query: select only needed fields, add limit
     const messageEvents = await prisma.messageEvent.findMany({
       where: {
         message: messageWhereClause,
       },
-      include: {
+      select: {
+        messageId: true,
+        status: true,
+        reason: true,
+        timestamp: true,
+        rawPayload: true,
         message: {
-          include: {
-            vendor: true,
-            channel: true,
+          select: {
+            vendor: { select: { name: true } },
+            channel: { select: { type: true } },
           },
         },
       },
+      orderBy: {
+        timestamp: 'desc',
+      },
+      take: maxEvents,
     });
 
     // Process channel analytics
@@ -967,6 +989,9 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
     const channelArray = Object.values(channelStats)
       .sort((a: any, b: any) => b.totalMessages - a.totalMessages);
 
+    const totalEventsProcessed = messageEvents.length;
+    const isLimitReached = totalEventsProcessed >= maxEvents;
+
     res.json({
       channelStats: channelArray,
       period,
@@ -977,6 +1002,8 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       summary: {
         totalChannels: channelArray.length,
         totalMessages: channelArray.reduce((sum: number, ch: any) => sum + ch.totalMessages, 0),
+        eventsProcessed: totalEventsProcessed,
+        limitReached: isLimitReached,
       },
     });
   } catch (error) {

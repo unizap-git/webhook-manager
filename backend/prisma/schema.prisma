@@ -105,6 +105,11 @@ model Message {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   events  MessageEvent[]
 
+  // Indexes for analytics queries
+  @@index([userId, createdAt])
+  @@index([userId, projectId, createdAt])
+  @@index([vendorId])
+  @@index([channelId])
   @@map("messages")
 }
 
@@ -119,6 +124,9 @@ model MessageEvent {
   // Relations
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
+  // Indexes for analytics queries
+  @@index([messageId, timestamp])
+  @@index([status])
   @@map("message_events")
 }
 

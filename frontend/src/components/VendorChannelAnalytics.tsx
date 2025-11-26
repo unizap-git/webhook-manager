@@ -138,74 +138,88 @@ const VendorChannelAnalytics: React.FC<VendorChannelAnalyticsProps> = ({ period 
   }, []);
 
   const fetchData = async (selectedPeriod: string, bypassCache: boolean = false) => {
+    setLoading(true);
+    setError(null);
+
+    // Generate frontend cache key based on period and project
+    const cacheKey = `${selectedPeriod}_${selectedProjectId || 'all'}`;
+
+    // Check frontend cache first (unless bypassing or refreshing)
+    if (!bypassCache && dataCache.current.has(cacheKey)) {
+      const cachedData = dataCache.current.get(cacheKey)!;
+      setData(cachedData);
+      setLoading(false);
+      return;
+    }
+
+    // Build query params with project filter
+    const queryParams = new URLSearchParams({
+      period: selectedPeriod,
+    });
+
+    if (selectedProjectId && !isAllProjects) {
+      queryParams.append('projectId', selectedProjectId);
+    }
+
+    // Add nocache parameter if bypassing cache
+    if (bypassCache) {
+      queryParams.append('nocache', 'true');
+    }
+
+    // Fetch vendor-channel and channel data INDEPENDENTLY (not with Promise.all)
+    // This way one can succeed even if the other fails
+    let vcResult: any = null;
+    let cResult: any = null;
+
+    // Fetch vendor-channel data
     try {
-      setLoading(true);
-      setError(null);
-
-      // Generate frontend cache key based on period and project
-      const cacheKey = `${selectedPeriod}_${selectedProjectId || 'all'}`;
-
-      // Check frontend cache first (unless bypassing or refreshing)
-      if (!bypassCache && dataCache.current.has(cacheKey)) {
-        const cachedData = dataCache.current.get(cacheKey)!;
-        setData(cachedData);
-        setLoading(false);
-        return;
-      }
-
-      // Build query params with project filter
-      const queryParams = new URLSearchParams({
-        period: selectedPeriod,
-      });
-
-      if (selectedProjectId && !isAllProjects) {
-        queryParams.append('projectId', selectedProjectId);
-      }
-
-      // Add nocache parameter if bypassing cache
-      if (bypassCache) {
-        queryParams.append('nocache', 'true');
-      }
-
-      // Fetch both vendor-channel and channel data
-      const [vendorChannelResult, channelResult] = await Promise.all([
-        apiCall('get', `/analytics/vendor-channel?${queryParams.toString()}`),
-        apiCall('get', `/analytics/channels?${queryParams.toString()}`)
-      ]);
-
-      const vcResult = vendorChannelResult as any;
-      const cResult = channelResult as any;
-
-      // Extract cache metadata from vendor-channel result (primary endpoint)
+      vcResult = await apiCall('get', `/analytics/vendor-channel?${queryParams.toString()}`);
       if (vcResult.meta) {
         setCacheInfo(vcResult.meta);
-      } else {
-        setCacheInfo(null);
       }
-
-      const combinedData: CombinedAnalyticsData = {
-        vendorChannelStats: vcResult.vendorChannelStats,
-        channelStats: cResult.channelStats,
-        summary: {
-          totalVendorChannelCombinations: vcResult.summary.totalVendorChannelCombinations,
-          totalChannels: cResult.summary.totalChannels,
-          totalMessages: Math.max(vcResult.summary.totalMessages, cResult.summary.totalMessages),
-        },
-        period: selectedPeriod,
-        dateRange: vcResult.dateRange || cResult.dateRange,
-      };
-
-      // Store in frontend cache for future tab switches
-      dataCache.current.set(cacheKey, combinedData);
-
-      setData(combinedData);
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Failed to fetch analytics data');
-      console.error('Error fetching combined analytics:', err);
-    } finally {
+      console.error('Error fetching vendor-channel analytics:', err);
+    }
+
+    // Fetch channel data
+    try {
+      cResult = await apiCall('get', `/analytics/channels?${queryParams.toString()}`);
+    } catch (err: any) {
+      console.error('Error fetching channel analytics:', err);
+    }
+
+    // If both failed, set general error
+    if (!vcResult && !cResult) {
+      setError('Failed to fetch analytics data. Please try again.');
       setLoading(false);
       setRefreshing(false);
+      return;
     }
+
+    // Build combined data with whatever succeeded
+    const combinedData: CombinedAnalyticsData = {
+      vendorChannelStats: vcResult?.vendorChannelStats || [],
+      channelStats: cResult?.channelStats || [],
+      summary: {
+        totalVendorChannelCombinations: vcResult?.summary?.totalVendorChannelCombinations || 0,
+        totalChannels: cResult?.summary?.totalChannels || 0,
+        totalMessages: Math.max(
+          vcResult?.summary?.totalMessages || 0,
+          cResult?.summary?.totalMessages || 0
+        ),
+      },
+      period: selectedPeriod,
+      dateRange: vcResult?.dateRange || cResult?.dateRange || { startDate: '', endDate: '' },
+    };
+
+    // Only cache if both succeeded
+    if (vcResult && cResult) {
+      dataCache.current.set(cacheKey, combinedData);
+    }
+
+    setData(combinedData);
+    setLoading(false);
+    setRefreshing(false);
   };
 
   useEffect(() => {
