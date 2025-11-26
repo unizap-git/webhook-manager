@@ -51,8 +51,9 @@ const swaggerUiOptions = {
     .swagger-ui .info .title { color: #8c47e2 }
     .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #8c47e2 }
     .swagger-ui .opblock.opblock-post { border-color: #8c47e2; background: rgba(140, 71, 226, 0.1) }
-    .swagger-ui .btn.authorize { background-color: #8c47e2; border-color: #8c47e2 }
+    .swagger-ui .btn.authorize { background-color: #8c47e2; border-color: #8c47e2; color: white }
     .swagger-ui .btn.authorize svg { fill: white }
+    .swagger-ui .auth-btn-wrapper .btn-done { background-color: #8c47e2; color: white }
   `,
   customSiteTitle: 'WebHook Hub API Docs',
   customfavIcon: '/favicon.svg',

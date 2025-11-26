@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { env } from '../config/env';
 import { config } from '../config/database';
 import { logger } from '../utils/logger';
 import { prisma } from '../config/database';
@@ -36,7 +37,7 @@ export const authenticateToken = async (
       return;
     }
 
-    const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
     
     // Get user from database to ensure they still exist and get latest info
     const user = await prisma.user.findUnique({
@@ -95,7 +96,7 @@ export const optionalAuth = async (
     const token = authHeader && authHeader.split(' ')[1];
 
     if (token) {
-      const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
       req.user = decoded;
     }
     
