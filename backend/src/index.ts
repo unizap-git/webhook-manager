@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import swaggerUi from 'swagger-ui-express';
 
 import { env, isDevelopment } from './config/env';
 import { config } from './config/database';
@@ -9,6 +10,7 @@ import { logger } from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { globalRateLimit } from './middleware/rateLimiter';
+import { swaggerSpec } from './config/swagger';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -41,6 +43,38 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
+
+// Swagger API Documentation
+const swaggerUiOptions = {
+  customCss: `
+    .swagger-ui .topbar { display: none }
+    .swagger-ui .info .title { color: #8c47e2 }
+    .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #8c47e2 }
+    .swagger-ui .opblock.opblock-post { border-color: #8c47e2; background: rgba(140, 71, 226, 0.1) }
+    .swagger-ui .btn.authorize { background-color: #8c47e2; border-color: #8c47e2 }
+    .swagger-ui .btn.authorize svg { fill: white }
+  `,
+  customSiteTitle: 'WebHook Hub API Docs',
+  customfavIcon: '/favicon.svg',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    showExtensions: true,
+    showCommonExtensions: true,
+    docExpansion: 'none',
+    defaultModelsExpandDepth: 2,
+    defaultModelExpandDepth: 2,
+  },
+};
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+
+// Serve raw OpenAPI JSON spec
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -124,6 +158,7 @@ async function startServer() {
     // Start HTTP server
     const server = app.listen(env.PORT, () => {
       logger.info(`🌐 Server: http://localhost:${env.PORT}`);
+      logger.info(`📚 API Docs: http://localhost:${env.PORT}/api-docs`);
       logger.info(`🔗 Frontend: ${env.CORS_ORIGIN}`);
       logger.info(`📦 Environment: ${env.NODE_ENV}`);
       logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
