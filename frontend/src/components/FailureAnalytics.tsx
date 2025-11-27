@@ -27,6 +27,7 @@ import {
   Timeline,
   Refresh,
   GetApp,
+  KeyboardArrowDown,
 } from '@mui/icons-material';
 import { apiCall } from '../api/client';
 import LoadingState from './LoadingState';
@@ -103,6 +104,7 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
   const [vendorChannelFailuresRowsPerPage, setVendorChannelFailuresRowsPerPage] = useState(10);
   const [webhookExamplesPagination, setWebhookExamplesPagination] = useState<Record<string, { page: number, rowsPerPage: number }>>({});
   const [cacheInfo, setCacheInfo] = useState<{ cached: boolean; cachedAt?: string; expiresIn?: number } | null>(null);
+  const [visibleAccordions, setVisibleAccordions] = useState(10); // Show top 10 initially
   const { selectedProjectId, isAllProjects } = useProject();
 
   // Frontend cache to avoid re-fetching when switching tabs (LRU with max 20 entries)
@@ -481,76 +483,114 @@ const FailureAnalytics: React.FC<FailureAnalyticsProps> = ({ period = '7d' }) =>
               </CardContent>
             </Card>
 
-            {/* Detailed Failure Examples */}
-            {data.failureReasons.filter(r => r.examples.length > 0).map((reason, index) => {
-              const pagination = getWebhookPagination(reason.reason);
-              const paginatedExamples = reason.examples.slice(
-                pagination.page * pagination.rowsPerPage,
-                pagination.page * pagination.rowsPerPage + pagination.rowsPerPage
-              );
+            {/* Detailed Failure Examples - Show Top 10 with Load More */}
+            {(() => {
+              const accordionsWithExamples = data.failureReasons.filter(r => r.examples.length > 0);
+              const visibleItems = accordionsWithExamples.slice(0, visibleAccordions);
+              const remainingCount = accordionsWithExamples.length - visibleAccordions;
 
               return (
-                <Accordion key={index} sx={{ mb: 2 }}>
-                  <AccordionSummary expandIcon={<ExpandMore />}>
-                    <Typography>
-                      {reason.reason} - Webhook Examples ({reason.examples.length} examples)
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Raw Webhook Examples for Debugging:
-                    </Typography>
-                    {paginatedExamples.map((example, exampleIndex) => (
-                      <Paper key={exampleIndex} sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
-                        <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle2" color="primary">
-                              Message Details:
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>Message ID:</strong> {example.messageId}
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>Recipient:</strong> {example.recipient}
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>Timestamp:</strong> {formatDate(example.timestamp)}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle2" color="secondary">
-                              Raw Webhook Payload:
-                            </Typography>
-                            <Box component="pre" sx={{
-                              fontSize: 11,
-                              bgcolor: 'grey.100',
-                              p: 1,
-                              borderRadius: 1,
-                              overflow: 'auto',
-                              maxHeight: 200
-                            }}>
-                              {JSON.stringify(example.rawPayload, null, 2)}
-                            </Box>
-                          </Grid>
-                        </Grid>
-                      </Paper>
-                    ))}
-                    <TablePagination
-                      rowsPerPageOptions={[10, 25, 50]}
-                      component="div"
-                      count={reason.examples.length}
-                      rowsPerPage={pagination.rowsPerPage}
-                      page={pagination.page}
-                      onPageChange={(_, newPage) => setWebhookPagination(reason.reason, newPage, pagination.rowsPerPage)}
-                      onRowsPerPageChange={(event) => {
-                        const newRowsPerPage = parseInt(event.target.value, 10);
-                        setWebhookPagination(reason.reason, 0, newRowsPerPage);
-                      }}
-                    />
-                  </AccordionDetails>
-                </Accordion>
+                <>
+                  {visibleItems.map((reason, index) => {
+                    const pagination = getWebhookPagination(reason.reason);
+                    const paginatedExamples = reason.examples.slice(
+                      pagination.page * pagination.rowsPerPage,
+                      pagination.page * pagination.rowsPerPage + pagination.rowsPerPage
+                    );
+
+                    return (
+                      <Accordion key={index} sx={{ mb: 2 }}>
+                        <AccordionSummary expandIcon={<ExpandMore />}>
+                          <Typography>
+                            {reason.reason} - Webhook Examples ({reason.examples.length} examples)
+                          </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography variant="subtitle2" gutterBottom>
+                            Raw Webhook Examples for Debugging:
+                          </Typography>
+                          {paginatedExamples.map((example, exampleIndex) => (
+                            <Paper key={exampleIndex} sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                              <Grid container spacing={2}>
+                                <Grid item xs={12} md={6}>
+                                  <Typography variant="subtitle2" color="primary">
+                                    Message Details:
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    <strong>Message ID:</strong> {example.messageId}
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    <strong>Recipient:</strong> {example.recipient}
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    <strong>Timestamp:</strong> {formatDate(example.timestamp)}
+                                  </Typography>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                  <Typography variant="subtitle2" color="secondary">
+                                    Raw Webhook Payload:
+                                  </Typography>
+                                  <Box component="pre" sx={{
+                                    fontSize: 11,
+                                    bgcolor: 'grey.100',
+                                    p: 1,
+                                    borderRadius: 1,
+                                    overflow: 'auto',
+                                    maxHeight: 200
+                                  }}>
+                                    {JSON.stringify(example.rawPayload, null, 2)}
+                                  </Box>
+                                </Grid>
+                              </Grid>
+                            </Paper>
+                          ))}
+                          <TablePagination
+                            rowsPerPageOptions={[10, 25, 50]}
+                            component="div"
+                            count={reason.examples.length}
+                            rowsPerPage={pagination.rowsPerPage}
+                            page={pagination.page}
+                            onPageChange={(_, newPage) => setWebhookPagination(reason.reason, newPage, pagination.rowsPerPage)}
+                            onRowsPerPageChange={(event) => {
+                              const newRowsPerPage = parseInt(event.target.value, 10);
+                              setWebhookPagination(reason.reason, 0, newRowsPerPage);
+                            }}
+                          />
+                        </AccordionDetails>
+                      </Accordion>
+                    );
+                  })}
+
+                  {/* Show More Button */}
+                  {remainingCount > 0 && (
+                    <Box display="flex" justifyContent="center" mt={2} mb={3}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<KeyboardArrowDown />}
+                        onClick={() => setVisibleAccordions(prev => prev + 10)}
+                        sx={{ borderRadius: 2 }}
+                      >
+                        Show {Math.min(remainingCount, 10)} more failure reasons ({remainingCount} remaining)
+                      </Button>
+                    </Box>
+                  )}
+
+                  {/* Show Less Button (when expanded) */}
+                  {visibleAccordions > 10 && (
+                    <Box display="flex" justifyContent="center" mb={3}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        onClick={() => setVisibleAccordions(10)}
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        Show less
+                      </Button>
+                    </Box>
+                  )}
+                </>
               );
-            })}
+            })()}
 
             {/* Daily Failure Trends */}
             {data.dailyFailures.length > 0 && (
