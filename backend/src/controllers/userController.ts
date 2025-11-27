@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma, config } from '../config/database';
+import { env } from '../config/env';
 import { logger } from '../utils/logger';
 
 interface AuthRequest extends Request {
@@ -330,7 +331,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id, email: user.email, accountType: user.accountType },
-      config.jwt.secret,
+      env.JWT_ACCESS_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -397,7 +398,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         accountType: user.accountType,
         parentId: user.parentId 
       },
-      config.jwt.secret,
+      env.JWT_ACCESS_SECRET,
       { expiresIn: '7d' }
     );
 
