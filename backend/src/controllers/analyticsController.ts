@@ -859,11 +859,20 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       take: maxEvents,
     });
 
-    // Process channel analytics
-    const channelStats: { [key: string]: any } = {};
-    const uniqueMessagesByChannel: { [key: string]: Set<string> } = {}; // Track unique message IDs per channel
+    // First, get the latest event for each unique message (same as vendor-channel analytics)
+    const latestEventByMessageCH = new Map<string, any>();
 
     messageEvents.forEach(event => {
+      const existing = latestEventByMessageCH.get(event.messageId);
+      if (!existing || new Date(event.timestamp) > new Date(existing.timestamp)) {
+        latestEventByMessageCH.set(event.messageId, event);
+      }
+    });
+
+    // Process channel analytics using ONLY the latest event per message
+    const channelStats: { [key: string]: any } = {};
+
+    latestEventByMessageCH.forEach(event => {
       const channel = event.message.channel.type;
 
       if (!channelStats[channel]) {
@@ -882,17 +891,15 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
           failureRate: 0,
           dailyStats: {},
         };
-        uniqueMessagesByChannel[channel] = new Set();
+        // totalMessages will be incremented below
       }
 
       const stats = channelStats[channel];
 
-      // Count unique messages only
-      if (uniqueMessagesByChannel[channel]) {
-        uniqueMessagesByChannel[channel].add(event.messageId);
-      }
+      // Count unique messages (each message counted once based on final status)
+      stats.totalMessages += 1;
 
-      // Count by status
+      // Count by FINAL status only (one count per message)
       if (event.status === 'sent') stats.sent += 1;
       else if (event.status === 'delivered') stats.delivered += 1;
       else if (event.status === 'read') stats.read += 1;
@@ -948,7 +955,7 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
     // Calculate rates and format data
     Object.entries(channelStats).forEach(([channel, stats]: [string, any]) => {
       // Set the actual unique message count
-      stats.totalMessages = uniqueMessagesByChannel[channel]?.size || 0;
+      // totalMessages already counted in the loop above
 
       if (stats.totalMessages > 0) {
         stats.deliveryRate = Math.round(((stats.delivered + stats.read) / stats.totalMessages) * 10000) / 100;
