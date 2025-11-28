@@ -91,6 +91,14 @@ All errors follow a consistent format:
         description: 'Webhook endpoints for receiving vendor callbacks',
       },
       {
+        name: 'Outbound Messages',
+        description: 'Log and track outbound messages sent via vendor APIs',
+      },
+      {
+        name: 'Outbound Messages - Admin',
+        description: 'Admin endpoints for backfill and data management',
+      },
+      {
         name: 'System',
         description: 'Health checks and system information',
       },
@@ -700,6 +708,119 @@ All errors follow a consistent format:
             success: { type: 'boolean', example: true },
             message: { type: 'string', example: 'Webhook processed successfully' },
             eventsProcessed: { type: 'integer', example: 5 },
+          },
+        },
+
+        // ==================== Outbound Message Schemas ====================
+        OutboundMessage: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'clx1234567890' },
+            userId: { type: 'string' },
+            projectId: { type: 'string' },
+            vendorId: { type: 'string' },
+            channelId: { type: 'string' },
+            vendorRefId: {
+              type: 'string',
+              example: 'abc123xyz',
+              description: 'Reference ID from vendor (requestId, sg_message_id, etc.)',
+            },
+            recipient: { type: 'string', example: '+919876543210' },
+            content: { type: 'string', example: 'Your OTP is 5678' },
+            sentAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
+            project: { $ref: '#/components/schemas/Project' },
+            vendor: { $ref: '#/components/schemas/Vendor' },
+            channel: { $ref: '#/components/schemas/Channel' },
+          },
+        },
+        CreateOutboundMessageRequest: {
+          type: 'object',
+          required: ['projectId', 'vendorId', 'channelId', 'vendorRefId', 'recipient', 'content'],
+          properties: {
+            projectId: { type: 'string', description: 'Project ID' },
+            vendorId: { type: 'string', description: 'Vendor ID' },
+            channelId: { type: 'string', description: 'Channel ID' },
+            vendorRefId: {
+              type: 'string',
+              example: 'abc123xyz',
+              description: 'The requestId/sg_message_id from vendor API response',
+            },
+            recipient: { type: 'string', example: '+919876543210' },
+            content: { type: 'string', example: 'Your OTP is 5678' },
+            sentAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'When the message was sent (defaults to now)',
+            },
+          },
+        },
+        MessageLifecycle: {
+          type: 'object',
+          properties: {
+            vendorRefId: { type: 'string', example: 'abc123xyz' },
+            outboundMessage: {
+              $ref: '#/components/schemas/OutboundMessage',
+              description: 'Original outbound message (if logged)',
+            },
+            webhookEvents: {
+              type: 'array',
+              description: 'All webhook events for this message',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  status: { type: 'string', example: 'delivered' },
+                  reason: { type: 'string' },
+                  timestamp: { type: 'string', format: 'date-time' },
+                  rawPayload: { type: 'object' },
+                },
+              },
+            },
+            timeline: {
+              type: 'array',
+              description: 'Chronological timeline of all events',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['outbound', 'webhook'] },
+                  status: { type: 'string' },
+                  timestamp: { type: 'string', format: 'date-time' },
+                  data: { type: 'object' },
+                },
+              },
+            },
+            currentStatus: {
+              type: 'string',
+              example: 'delivered',
+              description: 'Current message status',
+            },
+            totalEvents: { type: 'integer', example: 3 },
+          },
+        },
+        BackfillStatus: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer', example: 952 },
+            withVendorRefId: { type: 'integer', example: 949 },
+            withoutVendorRefId: { type: 'integer', example: 3 },
+            percentComplete: { type: 'number', example: 99.7 },
+          },
+        },
+        BackfillResult: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Backfill complete' },
+            stats: {
+              type: 'object',
+              properties: {
+                alreadyPopulated: { type: 'integer', example: 0 },
+                needsBackfill: { type: 'integer', example: 952 },
+                processed: { type: 'integer', example: 952 },
+                updated: { type: 'integer', example: 949 },
+              },
+            },
           },
         },
 

@@ -2,6 +2,24 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 
+// Vendor-specific field mappings for extracting reference IDs
+const VENDOR_REF_FIELD_MAP: Record<string, Record<string, string[]>> = {
+  'msg91': {
+    'sms': ['requestId', 'messageId', 'id', 'UUID'],
+    'whatsapp': ['requestId', 'messageId', 'id', 'UUID'],
+  },
+  'sendgrid': {
+    'email': ['sg_message_id', 'message_id', 'smtp_id', 'smtp-id', 'sg_event_id'],
+  },
+  'aisensy': {
+    'whatsapp': ['messageId', 'id'],
+  },
+  'karix': {
+    'sms': ['uid', 'message_id', 'id'],
+    'whatsapp': ['uid', 'message_id', 'id'],
+  },
+};
+
 /**
  * Log an outbound message
  * POST /api/outbound
@@ -396,6 +414,192 @@ export const deleteOutboundMessage = async (
     });
   } catch (error) {
     logger.error('Error deleting outbound message:', error);
+    next(error);
+  }
+};
+
+/**
+ * Extract vendor reference ID from raw payload
+ */
+function extractVendorRefId(
+  rawPayload: string | null,
+  vendorSlug: string,
+  channelType: string
+): string | null {
+  if (!rawPayload) return null;
+
+  try {
+    const payload = JSON.parse(rawPayload);
+    const vendorFields = VENDOR_REF_FIELD_MAP[vendorSlug.toLowerCase()];
+
+    if (!vendorFields) return null;
+
+    const channelFields = vendorFields[channelType.toLowerCase()];
+    if (!channelFields) {
+      const defaultFields = Object.values(vendorFields)[0];
+      if (!defaultFields) return null;
+
+      for (const field of defaultFields) {
+        if (payload[field]) return String(payload[field]);
+      }
+      return null;
+    }
+
+    for (const field of channelFields) {
+      if (payload[field]) return String(payload[field]);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Backfill vendor_ref_id for existing message events
+ * POST /api/outbound/admin/backfill
+ * Requires PARENT account type
+ */
+export const backfillVendorRefIds = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const accountType = req.user?.accountType;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    // Only allow PARENT accounts to run backfill
+    if (accountType !== 'PARENT') {
+      res.status(403).json({ error: 'Only parent accounts can run backfill' });
+      return;
+    }
+
+    // Check current status first
+    const withRefId = await prisma.messageEvent.count({
+      where: { vendorRefId: { not: null } },
+    });
+
+    const withoutRefId = await prisma.messageEvent.count({
+      where: { vendorRefId: null, rawPayload: { not: null } },
+    });
+
+    if (withoutRefId === 0) {
+      res.json({
+        success: true,
+        message: 'No records to backfill',
+        stats: {
+          alreadyPopulated: withRefId,
+          needsBackfill: 0,
+          processed: 0,
+          updated: 0,
+        },
+      });
+      return;
+    }
+
+    // Process in batches
+    const BATCH_SIZE = 100;
+    let processed = 0;
+    let updated = 0;
+
+    while (processed < withoutRefId) {
+      const events = await prisma.messageEvent.findMany({
+        where: {
+          vendorRefId: null,
+          rawPayload: { not: null },
+        },
+        include: {
+          message: {
+            include: {
+              vendor: true,
+              channel: true,
+            },
+          },
+        },
+        take: BATCH_SIZE,
+      });
+
+      if (events.length === 0) break;
+
+      for (const event of events) {
+        const vendorSlug = event.message.vendor.slug;
+        const channelType = event.message.channel.type;
+
+        const vendorRefId = extractVendorRefId(
+          event.rawPayload,
+          vendorSlug,
+          channelType
+        );
+
+        if (vendorRefId) {
+          await prisma.messageEvent.update({
+            where: { id: event.id },
+            data: { vendorRefId },
+          });
+          updated++;
+        }
+
+        processed++;
+      }
+    }
+
+    logger.info(`Backfill complete: ${updated}/${processed} events updated`);
+
+    res.json({
+      success: true,
+      message: 'Backfill complete',
+      stats: {
+        alreadyPopulated: withRefId,
+        needsBackfill: withoutRefId,
+        processed,
+        updated,
+      },
+    });
+  } catch (error) {
+    logger.error('Backfill error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get backfill status
+ * GET /api/outbound/admin/backfill-status
+ */
+export const getBackfillStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const [withRefId, withoutRefId, total] = await Promise.all([
+      prisma.messageEvent.count({ where: { vendorRefId: { not: null } } }),
+      prisma.messageEvent.count({ where: { vendorRefId: null } }),
+      prisma.messageEvent.count(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        withVendorRefId: withRefId,
+        withoutVendorRefId: withoutRefId,
+        percentComplete: total > 0 ? Math.round((withRefId / total) * 100) : 100,
+      },
+    });
+  } catch (error) {
+    logger.error('Backfill status error:', error);
     next(error);
   }
 };

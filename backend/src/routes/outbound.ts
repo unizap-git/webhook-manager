@@ -5,6 +5,8 @@ import {
   getOutboundMessages,
   getMessageLifecycle,
   deleteOutboundMessage,
+  backfillVendorRefIds,
+  getBackfillStatus,
 } from '../controllers/outboundController';
 import { authenticateToken } from '../middleware/auth';
 
@@ -184,6 +186,44 @@ router.post('/batch', batchLogOutboundMessages);
  */
 router.get('/', getOutboundMessages);
 
+// Admin routes - MUST come BEFORE parameterized routes
+/**
+ * @swagger
+ * /api/outbound/admin/backfill-status:
+ *   get:
+ *     summary: Get backfill status
+ *     description: Check how many message events have vendor_ref_id populated
+ *     tags: [Outbound Messages - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Backfill status
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/admin/backfill-status', getBackfillStatus);
+
+/**
+ * @swagger
+ * /api/outbound/admin/backfill:
+ *   post:
+ *     summary: Run vendor_ref_id backfill
+ *     description: Backfill vendor_ref_id from raw_payload for existing events. Requires PARENT account.
+ *     tags: [Outbound Messages - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Backfill complete
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - requires PARENT account
+ */
+router.post('/admin/backfill', backfillVendorRefIds);
+
+// Parameterized routes - MUST come AFTER static routes
 /**
  * @swagger
  * /api/outbound/{vendorRefId}/lifecycle:
