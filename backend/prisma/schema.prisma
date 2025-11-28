@@ -30,6 +30,7 @@ model User {
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
+  outboundMessages   OutboundMessage[]
 
   @@map("users")
 }
@@ -46,6 +47,7 @@ model Vendor {
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
+  outboundMessages   OutboundMessage[]
 
   @@map("vendors")
 }
@@ -53,7 +55,7 @@ model Vendor {
 model Channel {
   id          String  @id @default(cuid())
   name        String  @unique // SMS, WhatsApp, Email
-  type        String  // sms, whatsapp, email  
+  type        String  // sms, whatsapp, email
   description String?
   isActive    Boolean @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -62,6 +64,7 @@ model Channel {
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
+  outboundMessages   OutboundMessage[]
 
   @@map("channels")
 }
@@ -114,12 +117,13 @@ model Message {
 }
 
 model MessageEvent {
-  id         String   @id @default(cuid())
-  messageId  String   @map("message_id")
-  status     String   // sent, delivered, read, failed, bounced
-  reason     String?  // failure reason if applicable
-  timestamp  DateTime @default(now())
-  rawPayload String?  @map("raw_payload") // JSON string of webhook payload
+  id           String   @id @default(cuid())
+  messageId    String   @map("message_id")
+  vendorRefId  String?  @map("vendor_ref_id") // Extracted vendor reference ID (requestId, sg_message_id, etc.)
+  status       String   // sent, delivered, read, failed, bounced
+  reason       String?  // failure reason if applicable
+  timestamp    DateTime @default(now())
+  rawPayload   String?  @map("raw_payload") // JSON string of webhook payload
 
   // Relations
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -127,6 +131,7 @@ model MessageEvent {
   // Indexes for analytics queries
   @@index([messageId, timestamp])
   @@index([status])
+  @@index([vendorRefId]) // For matching with outbound messages
   @@map("message_events")
 }
 
@@ -168,6 +173,7 @@ model Project {
   userVendorChannels UserVendorChannel[]
   messages           Message[]
   analyticsCache     AnalyticsCache[]
+  outboundMessages   OutboundMessage[]
 
   @@unique([name, userId]) // Project names must be unique per user
   @@map("projects")
@@ -188,4 +194,30 @@ model ProjectAccess {
 
   @@unique([projectId, userId]) // One access record per project-user pair
   @@map("project_access")
+}
+
+// Outbound Message Logging - for tracking messages sent by users
+model OutboundMessage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  projectId   String   @map("project_id")
+  vendorId    String   @map("vendor_id")
+  channelId   String   @map("channel_id")
+  vendorRefId String   @map("vendor_ref_id") // The requestId/sg_message_id from vendor response
+  recipient   String   // Phone number or email
+  content     String   // Original message content
+  sentAt      DateTime @map("sent_at") // When the message was actually sent
+  createdAt   DateTime @default(now()) @map("created_at") // When logged to our system
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor  Vendor  @relation(fields: [vendorId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  // Indexes for efficient matching and queries
+  @@index([vendorRefId]) // Primary index for matching with webhook events
+  @@index([userId, projectId, sentAt])
+  @@index([userId, vendorId, channelId])
+  @@map("outbound_messages")
 }

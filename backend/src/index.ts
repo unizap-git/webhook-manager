@@ -20,6 +20,7 @@ import webhookRoutes from './routes/webhook';
 import analyticsRoutes from './routes/analytics';
 import userRoutes from './routes/user';
 import projectRoutes from './routes/projects';
+import outboundRoutes from './routes/outbound';
 
 // Services
 import { initializeWorkers } from './workers';
@@ -121,6 +122,7 @@ app.use('/api/channels', channelRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/outbound', outboundRoutes);
 
 // 404 handler for undefined routes
 app.use(notFoundHandler);

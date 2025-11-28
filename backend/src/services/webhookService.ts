@@ -133,6 +133,7 @@ export async function processWebhookPayload(
         await prisma.messageEvent.create({
           data: {
             messageId: message.id,
+            vendorRefId: parsedData.messageId || null, // Store vendor reference ID
             status: parsedData.status,
             reason: parsedData.reason,
             timestamp: parsedData.timestamp || new Date(),
@@ -210,6 +211,7 @@ export async function processWebhookPayload(
     await prisma.messageEvent.create({
       data: {
         messageId: message.id,
+        vendorRefId: parsedData.messageId || null, // Store vendor reference ID
         status: parsedData.status,
         reason: parsedData.reason,
         timestamp: parsedData.timestamp || new Date(),
