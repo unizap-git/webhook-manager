@@ -95,10 +95,6 @@ All errors follow a consistent format:
         description: 'Log and track outbound messages sent via vendor APIs',
       },
       {
-        name: 'Outbound Messages - Admin',
-        description: 'Admin endpoints for backfill and data management',
-      },
-      {
         name: 'System',
         description: 'Health checks and system information',
       },
@@ -798,32 +794,6 @@ All errors follow a consistent format:
             totalEvents: { type: 'integer', example: 3 },
           },
         },
-        BackfillStatus: {
-          type: 'object',
-          properties: {
-            total: { type: 'integer', example: 952 },
-            withVendorRefId: { type: 'integer', example: 949 },
-            withoutVendorRefId: { type: 'integer', example: 3 },
-            percentComplete: { type: 'number', example: 99.7 },
-          },
-        },
-        BackfillResult: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'Backfill complete' },
-            stats: {
-              type: 'object',
-              properties: {
-                alreadyPopulated: { type: 'integer', example: 0 },
-                needsBackfill: { type: 'integer', example: 952 },
-                processed: { type: 'integer', example: 952 },
-                updated: { type: 'integer', example: 949 },
-              },
-            },
-          },
-        },
-
         // ==================== System Schemas ====================
         HealthCheck: {
           type: 'object',
