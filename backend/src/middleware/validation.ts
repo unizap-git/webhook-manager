@@ -81,24 +81,48 @@ export const webhookSchemas = {
     }))
   }),
 
-  // Karix webhook payload
+  // Karix webhook payload - flexible schema to handle actual Karix WABA format
+  // Actual format: { channel, events: { mid, timestamp }, notificationAttributes: { status, reason }, recipient: { to }, ... }
   karixPayload: z.object({
     body: z.object({
-      account_uid: z.string(),
-      message_uid: z.string(),
-      to: z.string(),
-      from: z.string(),
-      channel: z.enum(['sms', 'whatsapp']),
-      status: z.enum(['queued', 'sent', 'delivered', 'read', 'failed', 'rejected']),
-      direction: z.enum(['inbound', 'outbound']),
-      total_cost: z.string().optional(),
-      created_time: z.string().datetime(),
-      sent_time: z.string().datetime().optional(),
-      delivered_time: z.string().datetime().optional(),
-      failed_time: z.string().datetime().optional(),
-      error_code: z.string().optional(),
-      error_message: z.string().optional()
-    })
+      channel: z.string().optional(), // "WABA", "SMS", etc.
+      events: z.object({
+        eventType: z.string().optional(),
+        timestamp: z.string().optional(),
+        date: z.string().optional(),
+        mid: z.string(), // Unique message ID - required
+      }).optional(),
+      notificationAttributes: z.object({
+        status: z.string(), // delivered, sent, failed, read
+        reason: z.string().optional(),
+        code: z.string().optional(),
+      }).optional(),
+      recipient: z.object({
+        to: z.string().optional(),
+        recipient_type: z.string().optional(),
+      }).optional(),
+      sender: z.object({
+        from: z.string().optional(),
+      }).optional(),
+      templateId: z.string().optional(),
+      templateCategory: z.string().optional(),
+      batchId: z.string().optional(),
+      campaignId: z.string().optional(),
+      contentType: z.string().optional(),
+      aCode: z.string().optional(),
+      appDetails: z.object({
+        type: z.string().optional(),
+        id: z.string().optional(),
+      }).optional(),
+      convDetails: z.object({
+        conversationType: z.string().optional(),
+        isBillable: z.string().optional(),
+        waConvId: z.string().optional(),
+        kxBillable: z.string().optional(),
+        uim: z.string().optional(),
+        bim: z.string().optional(),
+      }).optional(),
+    }).passthrough(), // Allow additional fields
   }),
 
   // AiSensy webhook payload  

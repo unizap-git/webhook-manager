@@ -457,7 +457,7 @@ console.log('Current status:', lifecycle.data.data.currentStatus);
 | MSG91 | SMS/WhatsApp | `requestId` |
 | SendGrid | Email | `sg_message_id` |
 | AiSensy | WhatsApp | `messageId` |
-| Karix | SMS/WhatsApp | `uid` |
+| Karix | SMS/WhatsApp | `events.mid` |
 
 ## 👥 User Management
 

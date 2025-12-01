@@ -24,6 +24,12 @@ async function main() {
       slug: 'sendgrid',
       description: 'SendGrid is a cloud-based email delivery platform for transactional and marketing emails',
       isActive: true
+    },
+    {
+      name: 'Karix',
+      slug: 'karix',
+      description: 'Karix is an enterprise communication platform for SMS, WhatsApp, and Voice APIs',
+      isActive: true
     }
   ];
 

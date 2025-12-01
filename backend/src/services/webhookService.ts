@@ -288,17 +288,51 @@ function parseMsg91Webhook(data: WebhookPayload, channelType: string) {
 
 function parseKarixWebhook(data: WebhookPayload, channelType: string) {
   // Karix webhook format parsing
-  const messageId = data.uid || data.message_id || data.id;
-  const status = mapKarixStatus(data.status || data.delivery_status);
-  const recipient = data.destination || data.to || data.recipient;
-  
+  // Actual Karix payload structure:
+  // {
+  //   events: { mid, timestamp, eventType, date },
+  //   notificationAttributes: { status, reason, code },
+  //   recipient: { to, recipient_type },
+  //   sender: { from },
+  //   templateId, channel, ...
+  // }
+
+  // Extract message ID - 'mid' is the unique identifier in Karix
+  const messageId = data.events?.mid || data.mid || data.uid || data.message_id || data.id;
+
+  // Extract status from notificationAttributes or fallback to direct status
+  const rawStatus = data.notificationAttributes?.status || data.status || data.delivery_status;
+  const status = mapKarixStatus(rawStatus);
+
+  // Extract recipient - can be in recipient.to or direct fields
+  const recipient = data.recipient?.to || data.destination || data.to || data.recipient;
+
+  // Extract reason from notificationAttributes
+  const reason = data.notificationAttributes?.reason || data.reason || data.error_message;
+
+  // Parse timestamp - Karix sends timestamp in milliseconds as string
+  let timestamp = new Date();
+  if (data.events?.timestamp) {
+    const ts = parseInt(data.events.timestamp, 10);
+    if (!isNaN(ts)) {
+      timestamp = new Date(ts);
+    }
+  } else if (data.created_time) {
+    timestamp = new Date(data.created_time);
+  }
+
+  // Build content summary from available fields
+  const contentSummary = data.templateId
+    ? `Template: ${data.templateId}`
+    : data.text?.substring(0, 100);
+
   return {
     messageId,
     status,
     recipient,
-    reason: data.reason || data.error_message,
-    timestamp: data.created_time ? new Date(data.created_time) : new Date(),
-    contentSummary: data.text ? data.text.substring(0, 100) : undefined,
+    reason,
+    timestamp,
+    contentSummary,
   };
 }
 
