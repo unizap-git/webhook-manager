@@ -1,9 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import { config } from '../config/database';
-import { logger } from '../utils/logger';
-import { prisma } from '../config/database';
 
 interface JwtPayload {
   userId: string;
@@ -38,29 +35,15 @@ export const authenticateToken = async (
     }
 
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
-    
-    // Get user from database to ensure they still exist and get latest info
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        accountType: true,
-        parentId: true,
-        name: true
-      }
-    });
 
-    if (!user) {
-      res.status(401).json({ error: 'Invalid token - user not found' });
-      return;
-    }
-
+    // Trust JWT payload instead of querying DB on every request
+    // JWT already contains userId, email, accountType from login
+    // This saves 1 DB read per authenticated request
     req.user = {
-      userId: user.id,
-      email: user.email,
-      accountType: user.accountType,
-      parentId: user.parentId ?? ''
+      userId: decoded.userId,
+      email: decoded.email,
+      accountType: decoded.accountType,
+      parentId: decoded.parentId ?? ''
     };
 
     next();
@@ -71,14 +54,14 @@ export const authenticateToken = async (
       });
       return;
     }
-    
+
     if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({
         error: 'Token expired',
       });
       return;
     }
-    
+
     res.status(500).json({
       error: 'Token verification failed',
     });
