@@ -288,11 +288,11 @@ export const getMessageLifecycle = async (
       },
     });
 
-    // Find related webhook events
+    // Find related webhook events using denormalized userId
     const webhookEvents = await prisma.messageEvent.findMany({
       where: {
         vendorRefId,
-        message: { userId },
+        userId,
       },
       include: {
         message: {

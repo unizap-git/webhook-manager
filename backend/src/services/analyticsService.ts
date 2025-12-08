@@ -351,12 +351,11 @@ export class AnalyticsService {
       const failureBreakdown = await prisma.messageEvent.groupBy({
         by: ['reason'],
         where: {
-          message: {
-            userId,
-            createdAt: {
-              gte: startDate,
-              lte: endDate
-            }
+          // Use denormalized userId field to avoid JOIN
+          userId,
+          timestamp: {
+            gte: startDate,
+            lte: endDate
           },
           status: {
             in: ['failed', 'bounced', 'rejected', 'undelivered']

@@ -61,26 +61,25 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
     const { startDate, endDate } = calculateDateRange(period as string);
 
     // Get actual message counts from messageEvent table for accuracy
+    // Using denormalized fields to avoid JOIN in where clause
     const messageWhereClause: any = {
-      message: {
-        userId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+      userId,
+      timestamp: {
+        gte: startDate,
+        lte: endDate,
       },
     };
 
     if (vendorId) {
-      messageWhereClause.message.vendorId = vendorId as string;
+      messageWhereClause.vendorId = vendorId as string;
     }
 
     if (channelId) {
-      messageWhereClause.message.channelId = channelId as string;
+      messageWhereClause.channelId = channelId as string;
     }
 
     if (projectId && projectId !== 'all') {
-      messageWhereClause.message.projectId = projectId as string;
+      messageWhereClause.projectId = projectId as string;
     }
 
     // Get all message events with timestamp to determine latest status
@@ -90,10 +89,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
         messageId: true,
         status: true,
         timestamp: true,
+        vendorId: true, // Use denormalized field
         message: {
           select: {
             createdAt: true,
-            vendorId: true,
           },
         },
       },
@@ -112,7 +111,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
           status: event.status,
           timestamp: event.timestamp,
           createdAt: event.message.createdAt,
-          vendorId: event.message.vendorId,
+          vendorId: event.vendorId || '', // Use denormalized field
         });
       }
     });
@@ -319,16 +318,25 @@ export const getAnalytics = async (req: AuthRequest, res: Response, next: NextFu
       where: whereClause,
     });
 
-    // Get failure breakdown
+    // Get failure breakdown using denormalized fields (no JOIN needed)
+    const eventWhereClause: any = {
+      userId,
+      status: 'failed',
+      reason: { not: null },
+    };
+    if (vendorId) eventWhereClause.vendorId = vendorId as string;
+    if (channelId) eventWhereClause.channelId = channelId as string;
+    if (projectId && projectId !== 'all') eventWhereClause.projectId = projectId as string;
+    if (startDate && endDate) {
+      eventWhereClause.timestamp = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
     const failureBreakdown = await prisma.messageEvent.groupBy({
       by: ['reason', 'status'],
-      where: {
-        message: whereClause,
-        status: 'failed',
-        reason: {
-          not: null,
-        },
-      },
+      where: eventWhereClause,
       _count: {
         reason: true,
       },
@@ -391,27 +399,25 @@ export const getEventAnalytics = async (req: AuthRequest, res: Response, next: N
         startDate.setDate(endDate.getDate() - 7);
     }
 
-    // Build where clause for message events
+    // Build where clause for message events using denormalized fields
     const whereClause: any = {
-      message: {
-        userId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+      userId,
+      timestamp: {
+        gte: startDate,
+        lte: endDate,
       },
     };
 
     if (vendorId) {
-      whereClause.message.vendorId = vendorId as string;
+      whereClause.vendorId = vendorId as string;
     }
 
     if (channelId) {
-      whereClause.message.channelId = channelId as string;
+      whereClause.channelId = channelId as string;
     }
 
     if (projectId && projectId !== 'all') {
-      whereClause.message.projectId = projectId as string;
+      whereClause.projectId = projectId as string;
     }
 
     // Get event name breakdown from raw payload
@@ -503,12 +509,10 @@ export const getDebugEventData = async (req: AuthRequest, res: Response, next: N
       return;
     }
 
-    // Get recent message events with raw payload data
+    // Get recent message events with raw payload data using denormalized userId
     const messageEvents = await prisma.messageEvent.findMany({
       where: {
-        message: {
-          userId: userId,
-        },
+        userId: userId,
         rawPayload: {
           not: null,
         },
@@ -638,24 +642,22 @@ export const getVendorChannelAnalytics = async (req: AuthRequest, res: Response,
       endDate_calc = dateRange.endDate;
     }
 
-    // Build where clause for message events
-    const messageWhereClause: any = {
+    // Build where clause for message events using denormalized fields
+    const eventWhereClause: any = {
       userId: userId,
-      createdAt: {
+      timestamp: {
         gte: startDate_calc,
         lte: endDate_calc,
       },
     };
 
     if (projectId && projectId !== 'all') {
-      messageWhereClause.projectId = projectId as string;
+      eventWhereClause.projectId = projectId as string;
     }
 
     // Optimized query: select only needed fields, add limit
     const messageEvents = await prisma.messageEvent.findMany({
-      where: {
-        message: messageWhereClause,
-      },
+      where: eventWhereClause,
       select: {
         messageId: true,
         status: true,
@@ -822,24 +824,22 @@ export const getChannelAnalytics = async (req: AuthRequest, res: Response, next:
       endDate_calc = dateRange.endDate;
     }
 
-    // Build where clause for message events
-    const messageWhereClause: any = {
+    // Build where clause for message events using denormalized fields
+    const eventWhereClause: any = {
       userId: userId,
-      createdAt: {
+      timestamp: {
         gte: startDate_calc,
         lte: endDate_calc,
       },
     };
 
     if (projectId && projectId !== 'all') {
-      messageWhereClause.projectId = projectId as string;
+      eventWhereClause.projectId = projectId as string;
     }
 
     // Optimized query: select only needed fields, add limit
     const messageEvents = await prisma.messageEvent.findMany({
-      where: {
-        message: messageWhereClause,
-      },
+      where: eventWhereClause,
       select: {
         messageId: true,
         status: true,
@@ -1032,7 +1032,7 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
 
     // Calculate date range using helper function or custom dates
     let startDate_calc: Date, endDate_calc: Date;
-    
+
     if (startDate && endDate) {
       startDate_calc = new Date(startDate as string);
       endDate_calc = new Date(endDate as string);
@@ -1042,33 +1042,31 @@ export const getFailureAnalytics = async (req: AuthRequest, res: Response, next:
       endDate_calc = dateRange.endDate;
     }
 
-    // Build where clause
-    const whereClause: any = {
-      message: {
-        userId: userId,
-        createdAt: {
-          gte: startDate_calc,
-          lte: endDate_calc,
-        },
+    // Build where clause using denormalized fields
+    const eventWhereClause: any = {
+      userId: userId,
+      timestamp: {
+        gte: startDate_calc,
+        lte: endDate_calc,
       },
       status: 'failed',
     };
 
     if (vendorId) {
-      whereClause.message.vendorId = vendorId as string;
+      eventWhereClause.vendorId = vendorId as string;
     }
 
     if (channelId) {
-      whereClause.message.channelId = channelId as string;
+      eventWhereClause.channelId = channelId as string;
     }
 
     if (projectId && projectId !== 'all') {
-      whereClause.message.projectId = projectId as string;
+      eventWhereClause.projectId = projectId as string;
     }
 
     // Get all failed message events
     const failedEvents = await prisma.messageEvent.findMany({
-      where: whereClause,
+      where: eventWhereClause,
       include: {
         message: {
           include: {

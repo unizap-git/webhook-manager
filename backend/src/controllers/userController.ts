@@ -98,9 +98,9 @@ export const getUserProfile = async (req: AuthRequest, res: Response, next: Next
       });
     }
 
-    // Get message events to calculate success rate
+    // Get message events to calculate success rate using denormalized userId
     const messageEvents = await prisma.messageEvent.findMany({
-      where: { message: { userId } },
+      where: { userId },
       select: {
         messageId: true,
         status: true,

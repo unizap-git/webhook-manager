@@ -138,6 +138,11 @@ export async function processWebhookPayload(
             reason: parsedData.reason,
             timestamp: parsedData.timestamp || new Date(),
             rawPayload: JSON.stringify(event),
+            // Denormalized fields for query optimization
+            userId,
+            vendorId: vendor.id,
+            channelId: channel.id,
+            projectId: projectId || config.projectId,
           },
         });
 
@@ -216,6 +221,11 @@ export async function processWebhookPayload(
         reason: parsedData.reason,
         timestamp: parsedData.timestamp || new Date(),
         rawPayload: JSON.stringify(webhookData),
+        // Denormalized fields for query optimization
+        userId,
+        vendorId: vendor.id,
+        channelId: channel.id,
+        projectId: resolvedProjectId,
       },
     });
 
@@ -541,20 +551,18 @@ async function updateAnalyticsCache(userId: string, vendorId: string, channelId:
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get message counts for today
+    // Get message counts for today using denormalized fields (no JOIN needed)
     let whereClause: any = {
-      message: {
-        userId,
-        vendorId,
-        channelId,
-      },
+      userId,
+      vendorId,
+      channelId,
       timestamp: {
         gte: today,
       },
     };
 
     if (projectId) {
-      whereClause.message.projectId = projectId;
+      whereClause.projectId = projectId;
     }
 
     const counts = await prisma.messageEvent.groupBy({

@@ -125,13 +125,22 @@ model MessageEvent {
   timestamp    DateTime @default(now())
   rawPayload   String?  @map("raw_payload") // JSON string of webhook payload
 
+  // Denormalized fields for query optimization (eliminates JOINs)
+  userId       String?  @map("user_id")
+  vendorId     String?  @map("vendor_id")
+  channelId    String?  @map("channel_id")
+  projectId    String?  @map("project_id")
+
   // Relations
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   // Indexes for analytics queries
   @@index([messageId, timestamp])
+  @@index([messageId]) // Standalone index for JOINs
   @@index([status])
   @@index([vendorRefId]) // For matching with outbound messages
+  @@index([userId, status, timestamp]) // Optimized for analytics groupBy queries
+  @@index([userId, vendorId, channelId, projectId, status]) // Full analytics filter
   @@map("message_events")
 }
 
