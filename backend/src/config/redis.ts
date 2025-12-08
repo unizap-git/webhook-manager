@@ -30,9 +30,15 @@ export class RedisConnection {
     const hasUrl = 'url' in redisConfig && redisConfig.url;
     const hasHost = 'host' in redisConfig;
 
-    // Skip if localhost (not properly configured)
-    if (!hasUrl && hasHost && (redisConfig.host === 'localhost' || redisConfig.host === '127.0.0.1')) {
-      logger.warn('⚠️ Redis not configured - using fallback mode');
+    // Skip if URL points to localhost (not properly configured)
+    if (hasUrl && (redisConfig.url!.includes('localhost') || redisConfig.url!.includes('127.0.0.1'))) {
+      logger.info('ℹ️ Redis not configured (localhost URL) - using fallback mode');
+      return null;
+    }
+
+    // Skip if host is localhost (not properly configured)
+    if (!hasUrl && hasHost && ((redisConfig as any).host === 'localhost' || (redisConfig as any).host === '127.0.0.1')) {
+      logger.info('ℹ️ Redis not configured (localhost host) - using fallback mode');
       return null;
     }
 
