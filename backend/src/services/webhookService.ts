@@ -146,13 +146,13 @@ export async function processWebhookPayload(
           },
         });
 
+        // Update analytics cache with increment for each event
+        await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId, parsedData.status);
+
         processedEvents++;
       }
-      
+
       logger.info(`📨 ${vendor.name}: processed ${processedEvents} events for message ${webhookData[0]?.sg_message_id}`);
-      
-      // Update analytics cache once for all events
-      await updateAnalyticsCache(userId, vendor.id, channel.id, projectId || config.projectId);
       return;
     }
 
@@ -231,8 +231,8 @@ export async function processWebhookPayload(
 
     logger.info(`📨 ${vendor.name}: ${parsedData.status} | ${parsedData.messageId}`);
 
-    // Update analytics cache (could be done in a separate job)
-    await updateAnalyticsCache(userId, vendor.id, channel.id, resolvedProjectId);
+    // Update analytics cache with increment (no expensive groupBy!)
+    await updateAnalyticsCache(userId, vendor.id, channel.id, resolvedProjectId, parsedData.status);
 
   } catch (error) {
     logger.error('Webhook processing error:', error);
@@ -546,106 +546,86 @@ function mapSendGridStatus(event: string): string {
   return statusMap[event?.toLowerCase()] || 'sent';
 }
 
-async function updateAnalyticsCache(userId: string, vendorId: string, channelId: string, projectId?: string) {
+async function updateAnalyticsCache(
+  userId: string,
+  vendorId: string,
+  channelId: string,
+  projectId: string | undefined,
+  status: string
+) {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get message counts for today using denormalized fields (no JOIN needed)
-    let whereClause: any = {
-      userId,
-      vendorId,
-      channelId,
-      timestamp: {
-        gte: today,
-      },
-    };
-
-    if (projectId) {
-      whereClause.projectId = projectId;
+    // Determine which counter to increment based on status
+    const incrementField = getIncrementField(status);
+    if (!incrementField) {
+      return; // Unknown status, skip
     }
-
-    const counts = await prisma.messageEvent.groupBy({
-      by: ['status'],
-      where: whereClause,
-      _count: {
-        status: true,
-      },
-    });
-
-    // Calculate totals
-    let totalSent = 0;
-    let totalDelivered = 0;
-    let totalRead = 0;
-    let totalFailed = 0;
-
-    counts.forEach((count) => {
-      switch (count.status) {
-        case 'sent':
-          totalSent = count._count.status;
-          break;
-        case 'delivered':
-          totalDelivered = count._count.status;
-          break;
-        case 'read':
-          totalRead = count._count.status;
-          break;
-        case 'failed':
-          totalFailed = count._count.status;
-          break;
-      }
-    });
-
-    const total = totalSent + totalDelivered + totalRead + totalFailed;
-    const successRate = total > 0 ? ((totalDelivered + totalRead) / total) * 100 : 0;
 
     // Build cache where clause
-    let cacheWhereClause: any = {
+    const cacheWhereClause: any = {
       userId,
       vendorId,
       channelId,
+      projectId: projectId || null,
       date: today,
     };
 
-    if (projectId) {
-      cacheWhereClause.projectId = projectId;
+    // Try to increment existing record first (most common case)
+    try {
+      await prisma.analyticsCache.update({
+        where: {
+          userId_vendorId_channelId_projectId_date: cacheWhereClause,
+        },
+        data: {
+          [incrementField]: { increment: 1 },
+        },
+      });
+    } catch (updateError: any) {
+      // Record doesn't exist, create it with initial count
+      if (updateError.code === 'P2025') {
+        const initialData: any = {
+          userId,
+          vendorId,
+          channelId,
+          projectId: projectId || null,
+          date: today,
+          totalSent: 0,
+          totalDelivered: 0,
+          totalRead: 0,
+          totalFailed: 0,
+          successRate: 0,
+        };
+        initialData[incrementField] = 1;
+
+        await prisma.analyticsCache.create({
+          data: initialData,
+        });
+      } else {
+        throw updateError;
+      }
     }
-
-    // Build cache data
-    let cacheData: any = {
-      userId,
-      vendorId,
-      channelId,
-      date: today,
-      totalSent,
-      totalDelivered,
-      totalRead,
-      totalFailed,
-      successRate,
-    };
-
-    if (projectId) {
-      cacheData.projectId = projectId;
-    }
-
-    // Upsert analytics cache
-    await prisma.analyticsCache.upsert({
-      where: {
-        userId_vendorId_channelId_projectId_date: cacheWhereClause,
-      },
-      create: cacheData,
-      update: {
-        totalSent,
-        totalDelivered,
-        totalRead,
-        totalFailed,
-        successRate,
-      },
-    });
   } catch (error) {
     logger.error('Analytics cache update error:', error);
     // Don't throw here as this is not critical for webhook processing
   }
+}
+
+// Helper function to map status to increment field
+function getIncrementField(status: string): string | null {
+  const statusMap: { [key: string]: string } = {
+    'sent': 'totalSent',
+    'queued': 'totalSent',
+    'delivered': 'totalDelivered',
+    'read': 'totalRead',
+    'clicked': 'totalRead',
+    'failed': 'totalFailed',
+    'bounced': 'totalFailed',
+    'rejected': 'totalFailed',
+    'undelivered': 'totalFailed',
+  };
+  return statusMap[status.toLowerCase()] || null;
 }
 
 // Webhook signature verification functions

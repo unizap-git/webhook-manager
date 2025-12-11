@@ -113,6 +113,7 @@ model Message {
   @@index([userId, projectId, createdAt])
   @@index([vendorId])
   @@index([channelId])
+  @@index([userId, vendorId, channelId, messageId]) // For webhook findFirst query
   @@map("messages")
 }
 
@@ -141,6 +142,8 @@ model MessageEvent {
   @@index([vendorRefId]) // For matching with outbound messages
   @@index([userId, status, timestamp]) // Optimized for analytics groupBy queries
   @@index([userId, vendorId, channelId, projectId, status]) // Full analytics filter
+  @@index([userId, vendorId, channelId, timestamp]) // For updateAnalyticsCache with timestamp filter
+  @@index([userId, vendorId, channelId, projectId, timestamp]) // For updateAnalyticsCache with projectId
   @@map("message_events")
 }
 
