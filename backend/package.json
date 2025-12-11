@@ -12,6 +12,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:migrate-from-turso": "tsx scripts/migrate-turso-to-mysql.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts,.tsx",
@@ -28,8 +29,6 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "@libsql/client": "^0.8.0",
-    "@prisma/adapter-libsql": "^5.22.0",
     "@prisma/client": "^5.22.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",
@@ -64,6 +63,7 @@
     "@types/swagger-ui-express": "^4.1.8"
   },
   "devDependencies": {
+    "@libsql/client": "^0.8.0",
     "@types/jest": "^29.5.8",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",

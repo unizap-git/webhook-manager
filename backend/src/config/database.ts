@@ -1,32 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
-import { createClient } from '@libsql/client';
 import { logger } from '../utils/logger';
 
-// Create libSQL client for Turso
-const libsqlConfig: any = {
-  url: process.env.TURSO_DATABASE_URL || 'file:./dev.db',
-};
-
-// Only add authToken if it exists (required for remote Turso, not for local file)
-if (process.env.TURSO_AUTH_TOKEN) {
-  libsqlConfig.authToken = process.env.TURSO_AUTH_TOKEN;
-}
-
-const libsql = createClient(libsqlConfig);
-
-// Create Prisma adapter
-const adapter = new PrismaLibSQL(libsql);
-
-// Create Prisma client with libSQL adapter
+// Create Prisma client for MySQL
 export const prisma = new PrismaClient({
-  adapter,
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-} as any);
+});
 
 export const config = {
   database: {
-    url: process.env.TURSO_DATABASE_URL || 'file:./dev.db',
+    url: process.env.DATABASE_URL,
   },
   redis: {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
@@ -56,7 +38,7 @@ export const config = {
 export async function connectDatabase() {
   try {
     await prisma.$connect();
-    logger.info('Database connected successfully to Turso');
+    logger.info('Database connected successfully to MySQL');
   } catch (error) {
     logger.error('Database connection failed:', error);
     throw error;

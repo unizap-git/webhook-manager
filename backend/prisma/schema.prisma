@@ -2,22 +2,21 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id          String   @id @default(cuid())
+  id          String   @id @default(cuid()) @db.VarChar(30)
   name        String?
   email       String   @unique
   password    String
-  accountType String   @default("PARENT") @map("account_type") // PARENT or CHILD
-  parentId    String?  @map("parent_id")
+  accountType String   @default("PARENT") @map("account_type") @db.VarChar(20)
+  parentId    String?  @map("parent_id") @db.VarChar(30)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -36,9 +35,9 @@ model User {
 }
 
 model Vendor {
-  id          String  @id @default(cuid())
-  name        String  @unique // msg91, karix, aisensy, sendgrid
-  slug        String  @unique // url-friendly version
+  id          String  @id @default(cuid()) @db.VarChar(30)
+  name        String  @unique @db.VarChar(50)
+  slug        String  @unique @db.VarChar(50)
   description String?
   isActive    Boolean @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -53,9 +52,9 @@ model Vendor {
 }
 
 model Channel {
-  id          String  @id @default(cuid())
-  name        String  @unique // SMS, WhatsApp, Email
-  type        String  // sms, whatsapp, email
+  id          String  @id @default(cuid()) @db.VarChar(30)
+  name        String  @unique @db.VarChar(50)
+  type        String  @db.VarChar(20)
   description String?
   isActive    Boolean @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -70,12 +69,12 @@ model Channel {
 }
 
 model UserVendorChannel {
-  id            String  @id @default(cuid())
-  userId        String  @map("user_id")
-  vendorId      String  @map("vendor_id")
-  channelId     String  @map("channel_id")
-  projectId     String  @map("project_id")
-  webhookUrl    String  @unique @map("webhook_url")
+  id            String  @id @default(cuid()) @db.VarChar(30)
+  userId        String  @map("user_id") @db.VarChar(30)
+  vendorId      String  @map("vendor_id") @db.VarChar(30)
+  channelId     String  @map("channel_id") @db.VarChar(30)
+  projectId     String  @map("project_id") @db.VarChar(30)
+  webhookUrl    String  @unique @map("webhook_url") @db.VarChar(255)
   webhookSecret String? @map("webhook_secret")
   isActive      Boolean @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -91,13 +90,13 @@ model UserVendorChannel {
 }
 
 model Message {
-  id             String    @id @default(cuid())
-  userId         String    @map("user_id")
-  vendorId       String    @map("vendor_id")
-  channelId      String    @map("channel_id")
-  projectId      String    @map("project_id")
-  recipient      String
-  messageId      String?   @map("message_id") // vendor-provided message ID
+  id             String    @id @default(cuid()) @db.VarChar(30)
+  userId         String    @map("user_id") @db.VarChar(30)
+  vendorId       String    @map("vendor_id") @db.VarChar(30)
+  channelId      String    @map("channel_id") @db.VarChar(30)
+  projectId      String    @map("project_id") @db.VarChar(30)
+  recipient      String    @db.VarChar(100)
+  messageId      String?   @map("message_id") @db.VarChar(100)
   contentSummary String?   @map("content_summary")
   createdAt      DateTime  @default(now()) @map("created_at")
 
@@ -113,46 +112,46 @@ model Message {
   @@index([userId, projectId, createdAt])
   @@index([vendorId])
   @@index([channelId])
-  @@index([userId, vendorId, channelId, messageId]) // For webhook findFirst query
+  @@index([userId, vendorId, channelId, messageId])
   @@map("messages")
 }
 
 model MessageEvent {
-  id           String   @id @default(cuid())
-  messageId    String   @map("message_id")
-  vendorRefId  String?  @map("vendor_ref_id") // Extracted vendor reference ID (requestId, sg_message_id, etc.)
-  status       String   // sent, delivered, read, failed, bounced
-  reason       String?  // failure reason if applicable
+  id           String   @id @default(cuid()) @db.VarChar(30)
+  messageId    String   @map("message_id") @db.VarChar(30)
+  vendorRefId  String?  @map("vendor_ref_id") @db.VarChar(100)
+  status       String   @db.VarChar(20)
+  reason       String?  @db.VarChar(255)
   timestamp    DateTime @default(now())
-  rawPayload   String?  @map("raw_payload") // JSON string of webhook payload
+  rawPayload   String?  @map("raw_payload") @db.Text
 
   // Denormalized fields for query optimization (eliminates JOINs)
-  userId       String?  @map("user_id")
-  vendorId     String?  @map("vendor_id")
-  channelId    String?  @map("channel_id")
-  projectId    String?  @map("project_id")
+  userId       String?  @map("user_id") @db.VarChar(30)
+  vendorId     String?  @map("vendor_id") @db.VarChar(30)
+  channelId    String?  @map("channel_id") @db.VarChar(30)
+  projectId    String?  @map("project_id") @db.VarChar(30)
 
   // Relations
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   // Indexes for analytics queries
   @@index([messageId, timestamp])
-  @@index([messageId]) // Standalone index for JOINs
+  @@index([messageId])
   @@index([status])
-  @@index([vendorRefId]) // For matching with outbound messages
-  @@index([userId, status, timestamp]) // Optimized for analytics groupBy queries
-  @@index([userId, vendorId, channelId, projectId, status]) // Full analytics filter
-  @@index([userId, vendorId, channelId, timestamp]) // For updateAnalyticsCache with timestamp filter
-  @@index([userId, vendorId, channelId, projectId, timestamp]) // For updateAnalyticsCache with projectId
+  @@index([vendorRefId])
+  @@index([userId, status, timestamp])
+  @@index([userId, vendorId, channelId, projectId, status])
+  @@index([userId, vendorId, channelId, timestamp])
+  @@index([userId, vendorId, channelId, projectId, timestamp])
   @@map("message_events")
 }
 
 model AnalyticsCache {
-  id             String   @id @default(cuid())
-  userId         String   @map("user_id")
-  vendorId       String?  @map("vendor_id")
-  channelId      String?  @map("channel_id")
-  projectId      String?  @map("project_id")
+  id             String   @id @default(cuid()) @db.VarChar(30)
+  userId         String   @map("user_id") @db.VarChar(30)
+  vendorId       String?  @map("vendor_id") @db.VarChar(30)
+  channelId      String?  @map("channel_id") @db.VarChar(30)
+  projectId      String?  @map("project_id") @db.VarChar(30)
   date           DateTime
   totalSent      Int      @default(0) @map("total_sent")
   totalDelivered Int      @default(0) @map("total_delivered")
@@ -172,10 +171,10 @@ model AnalyticsCache {
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  name        String   @db.VarChar(100)
   description String?
-  userId      String   @map("user_id") // Owner
+  userId      String   @map("user_id") @db.VarChar(30)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -187,16 +186,16 @@ model Project {
   analyticsCache     AnalyticsCache[]
   outboundMessages   OutboundMessage[]
 
-  @@unique([name, userId]) // Project names must be unique per user
+  @@unique([name, userId])
   @@map("projects")
 }
 
 model ProjectAccess {
-  id         String   @id @default(cuid())
-  projectId  String   @map("project_id")
-  userId     String   @map("user_id") // Child account
-  accessType String   @map("access_type") // 'specific' or 'all'
-  grantedBy  String   @map("granted_by") // Parent account who granted access
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  projectId  String   @map("project_id") @db.VarChar(30)
+  userId     String   @map("user_id") @db.VarChar(30)
+  accessType String   @map("access_type") @db.VarChar(20)
+  grantedBy  String   @map("granted_by") @db.VarChar(30)
   createdAt  DateTime @default(now()) @map("created_at")
 
   // Relations
@@ -204,22 +203,22 @@ model ProjectAccess {
   user      User    @relation("UserAccess", fields: [userId], references: [id], onDelete: Cascade)
   grantedByUser User @relation("UserGrantedBy", fields: [grantedBy], references: [id])
 
-  @@unique([projectId, userId]) // One access record per project-user pair
+  @@unique([projectId, userId])
   @@map("project_access")
 }
 
 // Outbound Message Logging - for tracking messages sent by users
 model OutboundMessage {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  projectId   String   @map("project_id")
-  vendorId    String   @map("vendor_id")
-  channelId   String   @map("channel_id")
-  vendorRefId String   @map("vendor_ref_id") // The requestId/sg_message_id from vendor response
-  recipient   String   // Phone number or email
-  content     String   // Original message content
-  sentAt      DateTime @map("sent_at") // When the message was actually sent
-  createdAt   DateTime @default(now()) @map("created_at") // When logged to our system
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  userId      String   @map("user_id") @db.VarChar(30)
+  projectId   String   @map("project_id") @db.VarChar(30)
+  vendorId    String   @map("vendor_id") @db.VarChar(30)
+  channelId   String   @map("channel_id") @db.VarChar(30)
+  vendorRefId String   @map("vendor_ref_id") @db.VarChar(100)
+  recipient   String   @db.VarChar(100)
+  content     String   @db.Text
+  sentAt      DateTime @map("sent_at")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -228,7 +227,7 @@ model OutboundMessage {
   channel Channel @relation(fields: [channelId], references: [id])
 
   // Indexes for efficient matching and queries
-  @@index([vendorRefId]) // Primary index for matching with webhook events
+  @@index([vendorRefId])
   @@index([userId, projectId, sentAt])
   @@index([userId, vendorId, channelId])
   @@map("outbound_messages")

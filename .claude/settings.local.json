@@ -8,7 +8,8 @@
       "Bash(netstat:*)",
       "Bash(findstr:*)",
       "Bash(npm run build:*)",
-      "Bash(npx prisma db push)"
+      "Bash(npx prisma db push)",
+      "Bash(npm run db:migrate-from-turso:*)"
     ],
     "deny": [],
     "ask": []
